@@ -1,0 +1,58 @@
+*.py[cod]
+.DS_Store
+
+# C extensions
+*.so
+*.dylib
+*.a
+a.out
+
+# Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+var
+sdist
+develop-eggs
+.installed.cfg
+lib64
+Debug
+Release
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.coverage
+.tox
+nosetests.xml
+
+# Translations
+*.mo
+
+# Mr Developer
+.mr.developer.cfg
+.pydevproject
+
+# LaTeX
+*.synctex.gz
+*.aux
+*.log
+
+# Symlink to dynamic library for development
+python/ukf/c
+python/ukf/ccs-c66x
+
+# Cmake junk
+CMakeFiles
+*.cmake
+CMakeCache.txt
+src/googletest
+src/eigen3*
+src/*.gz
+Makefile
+test/src/googletest*
+tmp
