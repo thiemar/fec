@@ -143,7 +143,7 @@ namespace Polynomials {
 
 /* Standard puncturing matrix convenience definitions. */
 namespace PuncturingMatrices {
-    using n_2_rate_1_2 = BinarySequence<1>;
+    using n_2_rate_1_2 = BinarySequence<1, 1>;
     using n_2_rate_2_3 = BinarySequence<1, 1, 0, 1>;
     using n_2_rate_3_4 = BinarySequence<1, 1, 0, 1, 1, 0>;
     using n_2_rate_5_6 = BinarySequence<1, 1, 0, 1, 1, 0, 0, 1, 1, 0>;
@@ -156,13 +156,11 @@ class PuncturedConvolutionalEncoder {
     static_assert(sizeof...(Polynomials) > 1u, "Minimum of two polynomials are required");
     static_assert(Detail::all_true<(Polynomials::size() == ConstraintLength)...>::value,
         "Length of polynomials must be equal to constraint length");
-    static_assert(PuncturingMatrix::all() || (PuncturingMatrix::size() % ConstraintLength*sizeof...(Polynomials) == 0u),
+    static_assert(PuncturingMatrix::size() % ConstraintLength*sizeof...(Polynomials) == 0u,
         "Puncturing matrix size must be an integer multiple of the code rate");
     static_assert(PuncturingMatrix::size() > 0u, "Puncturing matrix size must be larger than zero");
     static_assert(PuncturingMatrix::size() <= ConstraintLength*sizeof...(Polynomials),
         "Puncturing matrix size must be no greater than the constraint length multiplied by the code rate");
-
-    static constexpr bool use_puncturing = PuncturingMatrix::all() ? false : true;
 
     /*
     Pull in a number of data bits from 'in' corresponding to the size of the
@@ -171,7 +169,7 @@ class PuncturedConvolutionalEncoder {
     fill the workung vector.
     */
     template <std::size_t... ConstraintIndices>
-    void process_data(const uint8_t *in, std::size_t len, bool_vec_t *out, std::index_sequence<ConstraintIndices...>) {
+    static void process_data(const uint8_t *in, std::size_t len, bool_vec_t *out, std::index_sequence<ConstraintIndices...>) {
         /*
         Number of bytes from the input buffer that we need is determined by
         the working vector size and the constraint length index.
@@ -182,9 +180,8 @@ class PuncturedConvolutionalEncoder {
         (void)_;
     }
 
-    /* For the given polynomial, carry out an XOR if this bit is set. */
     template <std::size_t Shift, std::size_t... PolyIndices>
-    void calculate_convolutions(const uint8_t *in, std::size_t start_idx, std::size_t end_idx, bool_vec_t *out,
+    static void calculate_convolutions(const uint8_t *in, std::size_t start_idx, std::size_t end_idx, bool_vec_t *out,
             std::index_sequence<PolyIndices...>) {
         bool_vec_t cur_vec = 0u;
 
@@ -208,13 +205,13 @@ defined(__BIG_ENDIAN__) || \
 defined(__ARMEB__) || \
 defined(__THUMBEB__)
             /* Get input data from the buffer (big-endian). */
-            ((uint8_t *)&cur_vec)[i] = temp;
+            ((uint8_t *)&cur_vec)[sizeof(cur_vec)-1u - i] = temp;
 #elif defined(__BYTE_ORDER) && __BYTE_ORDER == __LITTLE_ENDIAN || \
 defined(__LITTLE_ENDIAN__) || \
 defined(__ARMEL__) || \
 defined(__THUMBEL__)
             /* Get input data from the buffer (little-endian). */
-            ((uint8_t *)&cur_vec)[sizeof(cur_vec)-1u - i] = temp;
+            ((uint8_t *)&cur_vec)[i] = temp;
 #else
 #error "Unable to detect endianness"
 #endif
@@ -225,25 +222,59 @@ defined(__THUMBEL__)
         (void)_;
     }
 
+    /* For the given polynomial, carry out an XOR if this bit is set. */
     template <std::size_t Shift, typename Poly, std::size_t PolyIndex>
-    void calculate_taps(bool_vec_t in, bool_vec_t *out) {
-        if (Poly::template test<Shift>() == true) {
+    static void calculate_taps(bool_vec_t in, bool_vec_t *out) {
+        if (Poly::template test<Shift>()) {
             out[PolyIndex] ^= in;
         }
     }
 
     /*
     Unpack the index sequence corresponding to non-punctured bits, and pack
-    the corresponding bits from the input vector into the output array.
+    the corresponding bits from the input vector into the output buffer.
 
-    Return the number of bits packed into the output array.
+    Return the number of bits packed into the output buffer.
     */
-    template <std::size_t... NonPunctured>
-    std::size_t pack_output_bits(const bool_vec_t *in, std::size_t len, uint8_t *out, std::index_sequence<NonPunctured...>) {
-        return 0u;
+    template <std::size_t... PolyIndices>
+    static std::size_t pack_output_bits(const bool_vec_t *in, std::size_t out_idx, uint8_t *out,
+            std::index_sequence<PolyIndices...>) {
+        /* Iterate over all non-punctured bit indices. */
+        for (std::size_t i = 0u; i < sizeof(bool_vec_t) * 8u; i++) {
+            int _[] = { (calculate_taps<Polynomials, PolyIndices>(cur_vec, out), 0)... };
+            (void)_;
+
+            (out_idx + i) % sizeof...(Polynomials)
+        }
+    }
+
+    /* For the given polynomial, carry out an XOR if this bit is set. */
+    template <std::size_t Shift, typename Poly, std::size_t PolyIndex>
+    static void extract_bits(bool_vec_t in, bool_vec_t *out) {
+        if (Poly::template test<Shift>()) {
+            out[PolyIndex] ^= in;
+        }
     }
 
 public:
+    /*
+    Calculate the required size of the output buffer for a given input
+    length. This may be larger than the output message length for the same
+    input length depending on the constraint length and the machine word
+    size.
+    */
+    // static constexpr std::size_t calculate_output_buffer_size(std::size_t len) {
+    //     std::size_t out_len = (len * 8u + ConstraintLength) * sizeof...(Polynomials) * PuncturingMatrix::ones();
+
+    //     if (out_len % PuncturingMatrix::size()) {
+    //         out_len = out_len / PuncturingMatrix::size() + 1u;
+    //     } else {
+    //         out_len /= PuncturingMatrix::size();
+    //     }
+
+    //     return out_len % 8u ? (out_len / 8u) + 1u : out_len / 8u;
+    // }
+
     /* Calculate the number of output bytes for a given input length. */
     static constexpr std::size_t calculate_output_length(std::size_t len) {
         std::size_t out_len = (len * 8u + ConstraintLength) * sizeof...(Polynomials) * PuncturingMatrix::ones();
@@ -272,10 +303,10 @@ public:
     Do efficient convolutional encoding by carrying out a number of
     convolutions in parallel equal to the word size.
 
-    Need to interleave the output and handle account puncturing, which adds
-    some overhead.
+    Need to interleave the output and carry out puncturing, which adds some
+    overhead.
     */
-    std::size_t encode(const uint8_t *input, std::size_t len, uint8_t *output) {
+    static std::size_t encode(const uint8_t *input, std::size_t len, uint8_t *output) {
         std::size_t num_bits = 0u;
 
         for (std::size_t i = 0u; i < len; i += sizeof(bool_vec_t)) {
@@ -286,13 +317,20 @@ public:
             corresponding working vector for each polynomial when the
             index matches a set bit in the polynomial.
             */
-            process_data(&input[i], len - (i * sizeof(bool_vec_t)), conv_vec, std::make_index_sequence<ConstraintLength>{});
+            process_data(&input[i], len - i, conv_vec, std::make_index_sequence<ConstraintLength>{});
+
+            /*
+            Work out how many bits from conv_vec to interleave into the
+            output buffer.
+            */
+            std::size_t occupied_bits = sizeof(bool_vec_t) * 8u;
 
             /*
             Pack the resulting bits into the output buffer using the
             puncturing matrix.
             */
-            num_bits += pack_output_bits(conv_vec, 0u, output, PuncturingMatrix::ones_index_sequence);
+            num_bits += pack_output_bits(conv_vec, occupied_bits, num_bits, output,
+                std::make_index_sequence<sizeof...(Polynomials)>{});
         }
 
         /* Clear any trailing bits in the output buffer. */
@@ -302,7 +340,7 @@ public:
 
     /* TEMPORARY: for testing only. */
     void test() {
-        uint8_t blah[5] = {1u, 2u, 3u, 4u, 5u};
+        uint8_t blah[9] = {0x11u, 0x22u, 0x33u, 0x44u, 0x55u, 0x66u, 0x77u, 0x88u, 0x99u};
         bool_vec_t conv_vec[sizeof...(Polynomials)] = {0u};
         process_data(blah, sizeof(blah), conv_vec, std::make_index_sequence<ConstraintLength>{});
 
