@@ -325,8 +325,6 @@ public:
             num_in_bits += sizeof(bool_vec_t) * sizeof...(Polynomials) * 8u;
         }
 
-        /* Clear any trailing bits in the output buffer. */
-
         return num_out_bits;
     }
 };
