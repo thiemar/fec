@@ -261,9 +261,9 @@ defined(__THUMBEL__)
     static std::size_t extract_bits(std::size_t in_bits, std::size_t in_idx, const bool_vec_t *in,
             std::size_t out_idx, uint8_t *out) {
         if (PuncturingMatrix::bits[(in_bits + PolyIndex) % PuncturingMatrix::size()]) {
-            out[out_idx / 8u] = in[PolyIndex] & ((std::size_t)1u << in_idx) ?
-                out[out_idx / 8u] | ((std::size_t)1u << (7u - (out_idx % 8u))) :
-                out[out_idx / 8u] & ~((std::size_t)1u << (7u - (out_idx % 8u)));
+            out[out_idx / 8u] = in[PolyIndex] & ((bool_vec_t)1u << in_idx) ?
+                out[out_idx / 8u] | (1u << (7u - (out_idx % 8u))) :
+                out[out_idx / 8u] & ~(1u << (7u - (out_idx % 8u)));
 
             return 1u;
         } else {
