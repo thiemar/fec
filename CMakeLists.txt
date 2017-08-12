@@ -1,5 +1,6 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.4 FATAL_ERROR)
 PROJECT(fec)
+INCLUDE(ExternalProject)
 INCLUDE(CheckCXXCompilerFlag)
 
 # Check for C++14 support.
@@ -11,6 +12,27 @@ ELSE()
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register")
+
+# Set default ExternalProject root directory
+SET_DIRECTORY_PROPERTIES(PROPERTIES EP_PREFIX .)
+
+# Add fecmagic
+ExternalProject_Add(
+fecmagic
+URL https://github.com/Venemo/fecmagic/archive/master.zip
+TIMEOUT 30
+# Disable install, configure and build steps
+INSTALL_COMMAND ""
+CONFIGURE_COMMAND ""
+BUILD_COMMAND ""
+# Wrap download, configure and build steps in a script to log output
+LOG_DOWNLOAD ON
+LOG_CONFIGURE ON
+LOG_BUILD ON)
+
+# Specify include dir
+ExternalProject_Get_Property(fecmagic source_dir)
+SET(fecmagic_dir ${source_dir})
 
 ENABLE_TESTING()
 
