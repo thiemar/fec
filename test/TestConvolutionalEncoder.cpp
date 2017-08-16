@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include <cstdlib>
-#include "conv.h"
+#include "FEC/Convolutional.h"
 
 /* Test against fecmagic implementation. */
 #include "convolutional-encoder.h"

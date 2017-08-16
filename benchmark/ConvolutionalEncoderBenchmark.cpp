@@ -1,6 +1,6 @@
 #include <benchmark/benchmark.h>
 #include <cstdlib>
-#include "conv.h"
+#include "FEC/Convolutional.h"
 
 /* Benchmark against fecmagic implementation. */
 #include "convolutional-encoder.h"

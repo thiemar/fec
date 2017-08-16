@@ -26,7 +26,12 @@ SOFTWARE.
 #include <bitset>
 #include <cstddef>
 #include <tuple>
+#include <type_traits>
 #include <utility>
+
+#include "FEC/Types.h"
+#include "FEC/BinarySequence.h"
+#include "FEC/Interleaver.h"
 
 namespace Thiemar {
 
@@ -36,107 +41,19 @@ namespace Detail {
     template <bool... v>
     using all_true = std::is_same<bool_pack<true, v...>, bool_pack<v..., true>>;
 
-    /* Concatenate two integer sequences, with an offset for the second. */
-    template <typename Seq1, std::size_t Offset, typename Seq2> struct concat_seq;
+    template <std::size_t... MaskIndices>
+    constexpr bool_vec_t mask_lsb(std::index_sequence<MaskIndices...>) {
+        bool_vec_t mask = 0u;
+        for (std::size_t i : { MaskIndices... }) {
+            mask |= (bool_vec_t)0xffu << (sizeof(bool_vec_t)-1u - i);
+        }
 
-    template <std::size_t... Is1, std::size_t Offset, std::size_t... Is2>
-    struct concat_seq<std::index_sequence<Is1...>, Offset, std::index_sequence<Is2...>> {
-        using index_sequence = std::index_sequence<Is1..., (Offset + Is2)...>;
-    };
+        return mask;
+    }
 
-    /*
-    Used to find the indices of set bits in a binary sequence at compile
-    time.
-    */
-    template <std::size_t Offset, bool... Bits>
-    struct OneIndices {
-        using index_sequence = std::index_sequence<>;
-    };
-
-    template <std::size_t Offset, bool... Bits>
-    struct OneIndices<Offset, true, Bits...> {
-        using index_sequence = typename concat_seq<std::index_sequence<Offset>, Offset+1u,
-            typename OneIndices<Offset+1u, Bits...>::index_sequence>::index_sequence;
-    };
-
-    template <std::size_t Offset, bool... Bits>
-    struct OneIndices<Offset, false, Bits...> {
-        using index_sequence = typename OneIndices<Offset+1u, Bits...>::index_sequence;
-    };
-
-    /*
-    Used to find the indices of cleared bits in a binary sequence at compile
-    time.
-    */
-    template <std::size_t Offset, bool... Bits>
-    struct ZeroIndices {
-        using index_sequence = std::index_sequence<>;
-    };
-
-    template <std::size_t Offset, bool... Bits>
-    struct ZeroIndices<Offset, false, Bits...> {
-        using index_sequence = typename concat_seq<std::index_sequence<Offset>, Offset+1u,
-            typename ZeroIndices<Offset+1u, Bits...>::index_sequence>::index_sequence;
-    };
-
-    template <std::size_t Offset, bool... Bits>
-    struct ZeroIndices<Offset, true, Bits...> {
-        using index_sequence = typename ZeroIndices<Offset+1u, Bits...>::index_sequence;
-    };
-
-    /* Test if a particular bit in a binary sequence is set. */
-    template <std::size_t Index, bool... Bits>
-    struct BitTest {
-        bool set = false;
-    };
-
-    template <std::size_t Index, bool B, bool... Bits>
-    struct BitTest<Index, B, Bits...> {
-        bool set = BitTest<Index-1u, Bits...>{}.set;
-    };
-
-    template <bool... Bits>
-    struct BitTest<0u, true, Bits...> {
-        bool set = true;
-    };
-
-    template <bool... Bits>
-    struct BitTest<0u, false, Bits...> {
-        bool set = false;
-    };
 }
 
 namespace Convolutional {
-
-/*
-For best performance, bool_vec_t should be a type with the same width as the
-machine word size.
-*/
-using bool_vec_t = std::size_t;
-
-/* Class for a compile-time binary sequence. */
-template<bool... Bits>
-class BinarySequence {
-public:
-    static constexpr std::array<bool, sizeof...(Bits)> bits = { Bits... };
-
-    using index_sequence = std::make_index_sequence<sizeof...(Bits)>;
-    using ones_index_sequence = typename Detail::OneIndices<0u, Bits...>::index_sequence;
-    using zeroes_index_sequence = typename Detail::ZeroIndices<0u, Bits...>::index_sequence;
-
-    static constexpr std::size_t size() { return sizeof...(Bits); }
-    static constexpr std::size_t ones() { return ones_index_sequence::size(); }
-    static constexpr std::size_t zeroes() { return zeroes_index_sequence::size(); }
-    static constexpr bool all() { return ones() == size(); }
-    static constexpr bool none() { return zeroes() == size(); }
-    static constexpr bool any() { return ones() > 0u; }
-
-    template <std::size_t I>
-    static constexpr bool test() { return Detail::BitTest<I, Bits...>{}.set; }
-};
-
-template<bool... Bits>
-constexpr std::array<bool, sizeof...(Bits)> BinarySequence<Bits...>::bits;
 
 /*
 Standard polynomial convenience definitions.
@@ -167,6 +84,10 @@ class PuncturedConvolutionalEncoder {
     static_assert(PuncturingMatrix::size() > 0u, "Puncturing matrix size must be larger than zero");
     static_assert(PuncturingMatrix::size() <= ConstraintLength*sizeof...(Polynomials),
         "Puncturing matrix size must be no greater than the constraint length multiplied by the code rate");
+    static_assert(sizeof(bool_vec_t) * 8u / PuncturingMatrix::ones() > 0u,
+        "Word size must be large enough to fit at least one puncturing matrix cycle");
+
+    using interleaver = Interleaver<PuncturingMatrix, typename... Polynomials, min_block_size()>;
 
     /*
     Pull in a number of data bits from 'in' corresponding to the size of the
@@ -256,7 +177,6 @@ defined(__THUMBEL__)
         return out_idx;
     }
 
-    /* For the given polynomial, carry out an XOR if this bit is set. */
     template <std::size_t PolyIndex>
     static std::size_t extract_bits(std::size_t in_bits, std::size_t in_idx, const bool_vec_t *in,
             std::size_t out_idx, uint8_t *out) {
@@ -269,6 +189,16 @@ defined(__THUMBEL__)
         } else {
             return 0u;
         }
+    }
+
+    /*
+    Number of input bytes processed per call of encode_block. This number is
+    calculated to generate an integer number of output bytes.
+    */
+    static constexpr std::size_t min_block_size() {
+        std::size_t puncturing_row_len = PuncturingMatrix::size() / sizeof...(Polynomials);
+        return sizeof(bool_vec_t) > puncturing_row_len ? (sizeof(bool_vec_t) / puncturing_row_len) * puncturing_row_len :
+            puncturing_row_len;
     }
 
 public:
@@ -303,7 +233,7 @@ public:
     Need to interleave the output and carry out puncturing, which adds some
     overhead.
     */
-    static std::size_t encode(const uint8_t *input, std::size_t len, uint8_t *output) {
+    static std::size_t encode(const uint8_t *input, std::size_t len, uint8_t *out) {
         std::size_t num_out_bits = 0u, num_in_bits = 0u;
 
         for (std::size_t i = 0u; i < len + ConstraintLength / 8u + (ConstraintLength % 8u ? 1u : 0u); i += sizeof(bool_vec_t)) {
@@ -320,12 +250,37 @@ public:
             Pack the resulting bits into the output buffer using the
             puncturing matrix.
             */
-            num_out_bits = pack_output_bits(num_in_bits, conv_vec, num_out_bits, output,
+            num_out_bits = pack_output_bits(num_in_bits, conv_vec, num_out_bits, out,
                 std::make_index_sequence<sizeof...(Polynomials)>{});
             num_in_bits += sizeof(bool_vec_t) * sizeof...(Polynomials) * 8u;
         }
 
         return num_out_bits;
+    }
+
+    /*
+    Efficiently encode a block of bytes of size equal to the constraint
+    length multiplied by the size of bool_vec_t in bytes.
+    */
+    template <std::size_t... PolyIndices>
+    static void encode_block(std::size_t in_idx, const bool_vec_t *in, std::size_t out_idx, uint8_t *out) {
+        bool_vec_t conv_vec[sizeof...(Polynomials) * interleaver::num_iterations()] = {};
+
+        process_data(i, input, len - i, conv_vec, std::make_index_sequence<ConstraintLength>{});
+
+        int _[] = { (out_idx += extract_bits<PolyIndices>(
+            in_idx + (i * sizeof...(Polynomials)), (sizeof(bool_vec_t) * 8u)-1u - i, in, out_idx, out), 0)... };
+        (void)_;
+
+        /* Mask off unwanted bits. */
+        mask_lsb(std::make_index_sequence<min_block_size() % sizeof(bool_vec_t)>{})
+
+        /*
+        Pack the appropriate number of bits into a bool_vec_t for the
+        interleaver.
+        */
+
+        interleave_bits(conv_vec, out_idx, out, std::make_index_sequence<blah>{});
     }
 };
 
