@@ -127,6 +127,41 @@ namespace Detail {
     Use magic numbers to spread input word as efficiently as possible based
     on the puncturing matrix.
     */
+
+    /* Need these forward declarations. */
+    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
+    typename std::enable_if_t<index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
+    (ShiftIndex > 1u), bool_vec_t> spread_word(
+            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>);
+
+    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
+    typename std::enable_if_t<!index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
+    (ShiftIndex > 1u), bool_vec_t> spread_word(
+            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>);
+
+    /* This is the final shift/mask operation. */
+    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
+    typename std::enable_if_t<ShiftIndex == 1u, bool_vec_t> spread_word(
+            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>) {
+        /*
+        Add ShiftIndex to the InputIndices which correspond to DiffIndices
+        greater than or equal to ShiftIndex.
+        */
+        using new_input_sequence = std::index_sequence<DiffIndices >= 1u ? InputIndices + 1u : InputIndices...>;
+
+        return (in | in >> 1u) & mask_from_index_sequence(new_input_sequence{});
+    }
+
+    /*
+    Skip if none of the DiffIndices are greater than or equal to ShiftIndex.
+    */
+    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
+    typename std::enable_if_t<index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
+    (ShiftIndex > 1u), bool_vec_t> spread_word(
+            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>) {
+        return spread_word<ShiftIndex / 2u>(in, std::index_sequence<InputIndices...>{}, std::index_sequence<DiffIndices...>{});
+    }
+
     template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
     typename std::enable_if_t<!index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
     (ShiftIndex > 1u), bool_vec_t> spread_word(
@@ -149,29 +184,6 @@ namespace Detail {
         */
         return spread_word<ShiftIndex / 2u>((in | in >> ShiftIndex) & mask_from_index_sequence(new_input_sequence{}),
             new_input_sequence{}, new_diff_sequence{});
-    }
-
-    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
-    (ShiftIndex > 1u), bool_vec_t> spread_word(
-            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>) {
-        /*
-        Skip if none of the DiffIndices are greater than or equal to
-        ShiftIndex.
-        */
-        return spread_word<ShiftIndex / 2u>(in, std::index_sequence<InputIndices...>{}, std::index_sequence<DiffIndices...>{});
-    }
-
-    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<ShiftIndex == 1u, bool_vec_t> spread_word(
-            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>) {
-        /*
-        Add ShiftIndex to the InputIndices which correspond to DiffIndices
-        greater than or equal to ShiftIndex.
-        */
-        using new_input_sequence = std::index_sequence<DiffIndices >= 1u ? InputIndices + 1u : InputIndices...>;
-
-        return (in | in >> 1u) & mask_from_index_sequence(new_input_sequence{});
     }
 }
 
@@ -237,49 +249,50 @@ class Interleaver {
     //     (void)_;
     // }
 
-    // /*
-    // Takes an array of bool_vec_t of size NumPoly, each packed with N bits,
-    // where N is an integer multiple of the puncturing matrix row length.
-    // */
-    // template <std::size_t N, std::size_t... PolyIndices>
-    // static bool_vec_t interleave(const bool_vec_t *in, std::index_sequence<PolyIndices...>) {
-    //     static_assert(!(N % (PuncturingMatrix::size() / NumPoly)),
-    //         "Interleaver input vectors must have an integer number of puncturing matrix cycles")
-
-    //     bool_vec_t out = 0u;
-    //     int _[] = { (out |= spread_word<sizeof(bool_vec_t) * 8u / 2u>(
-    //         in[PolyIndices], input_index_sequence<PolyIndices>{},
-    //         Detail::DiffIndexSequence<output_index_sequence<PolyIndices>, input_index_sequence<PolyIndices>>::type{}) <<
-    //         PolyIndices, 0)... };
-    //     (void)_;
-
-    //     return out;
-    // }
-
 public:
     /* Number of interleaver cycles required for the given block size. */
     static constexpr std::size_t num_iterations() {
         return (BlockSize * 8u) % num_in_bits() ? ((BlockSize * 8u) / num_in_bits()) + 1u : (BlockSize * 8u) / num_in_bits();
     }
 
-    template <std::size_t... I>
-    static void print_helper(std::index_sequence<I...>) {
-        for (std::size_t i : { I... }) {
-            printf("%lu, ", i);
-        }
-        printf("\n");
+    /*
+    Takes an array of bool_vec_t of size NumPoly, each packed with N bits,
+    where N is an integer multiple of the puncturing matrix row length.
+    */
+    template <std::size_t N, std::size_t... PolyIndices>
+    static bool_vec_t interleave(const bool_vec_t *in, std::index_sequence<PolyIndices...>) {
+        static_assert(!(N % (PuncturingMatrix::size() / NumPoly)),
+            "Interleaver input vectors must have an integer number of puncturing matrix cycles");
+
+        bool_vec_t out = 0u;
+        int _[] = { (out |= Detail::spread_word<sizeof(bool_vec_t) * 8u / 2u>(
+            in[PolyIndices], input_index_sequence<PolyIndices>{},
+            (typename Detail::DiffIndexSequence<output_index_sequence<PolyIndices>,
+            input_index_sequence<PolyIndices>>::type){}) <<
+            PolyIndices, 0)... };
+        (void)_;
+
+        return out;
     }
 
-    static void print_info() {
-        printf("input, stream 0: ");
-        print_helper(input_index_sequence<0u>{});
-        printf("input, stream 1: ");
-        print_helper(input_index_sequence<1u>{});
-        printf("output, stream 0: ");
-        print_helper(output_index_sequence<0u>{});
-        printf("output, stream 1: ");
-        print_helper(output_index_sequence<1u>{});
-    }
+    // template <std::size_t... I>
+    // static void print_helper(std::index_sequence<I...>) {
+    //     for (std::size_t i : { I... }) {
+    //         printf("%lu, ", i);
+    //     }
+    //     printf("\n");
+    // }
+
+    // static void print_info() {
+    //     printf("input, stream 0: ");
+    //     print_helper(input_index_sequence<0u>{});
+    //     printf("input, stream 1: ");
+    //     print_helper(input_index_sequence<1u>{});
+    //     printf("output, stream 0: ");
+    //     print_helper(output_index_sequence<0u>{});
+    //     printf("output, stream 1: ");
+    //     print_helper(output_index_sequence<1u>{});
+    // }
 
     // static void interleave_bits(const bool_vec_t *in, uint8_t *out) {
     //     do_interleave_iterations()
