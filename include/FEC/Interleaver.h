@@ -189,29 +189,26 @@ class Interleaver {
 
     /* Calculate number of bits per stream consumed per interleaver cycle. */
     static constexpr std::size_t num_in_bits(std::size_t rem_bits) {
-        std::size_t puncturing_row_len = PuncturingMatrix::size() / NumPoly;
-        std::size_t max_bits = sizeof(bool_vec_t) * 8u * puncturing_row_len /
+        std::size_t max_bits = sizeof(bool_vec_t) * 8u * (PuncturingMatrix::size() / NumPoly) /
             PuncturingMatrix::ones();
 
-        return std::min((max_bits / puncturing_row_len) * puncturing_row_len, rem_bits);
+        return std::min((max_bits / (PuncturingMatrix::size() / NumPoly)) * (PuncturingMatrix::size() / NumPoly), rem_bits);
     }
 
     static constexpr std::size_t num_in_bits() {
-        std::size_t puncturing_row_len = PuncturingMatrix::size() / NumPoly;
-        std::size_t max_bits = sizeof(bool_vec_t) * 8u * puncturing_row_len /
+        std::size_t max_bits = sizeof(bool_vec_t) * 8u * (PuncturingMatrix::size() / NumPoly) /
             PuncturingMatrix::ones();
 
-        return (max_bits / puncturing_row_len) * puncturing_row_len;
+        return (max_bits / (PuncturingMatrix::size() / NumPoly)) * (PuncturingMatrix::size() / NumPoly);
     }
 
     /* Calculate number of output bits produced per interleaver cycle. */
     template <std::size_t N>
     static constexpr std::size_t num_out_bits() {
-        std::size_t puncturing_row_len = PuncturingMatrix::size() / NumPoly;
-        static_assert(!(N % puncturing_row_len),
+        static_assert(!(N % (PuncturingMatrix::size() / NumPoly)),
             "Interleaver needs an integer number of puncturing matrix cycles");
 
-        return N * PuncturingMatrix::ones() / puncturing_row_len;
+        return N * PuncturingMatrix::ones() / (PuncturingMatrix::size() / NumPoly);
     }
 
     template <std::size_t PolyIndex>
