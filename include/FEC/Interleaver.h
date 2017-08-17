@@ -268,7 +268,7 @@ public:
         int _[] = { (out |= Detail::spread_word<sizeof(bool_vec_t) * 8u / 2u>(
             in[PolyIndices], input_index_sequence<PolyIndices>{},
             (typename Detail::DiffIndexSequence<output_index_sequence<PolyIndices>,
-            input_index_sequence<PolyIndices>>::type){}) <<
+            input_index_sequence<PolyIndices>>::type){}) >>
             PolyIndices, 0)... };
         (void)_;
 
