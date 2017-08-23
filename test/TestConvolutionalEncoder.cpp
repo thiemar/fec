@@ -7,9 +7,9 @@
 
 using TestEncoder = Thiemar::Convolutional::PuncturedConvolutionalEncoder<
     7u,
-    Thiemar::Convolutional::BinarySequence<1, 1>,
-    Thiemar::Convolutional::BinarySequence<1, 1, 1, 0, 0, 1, 1>,
-    Thiemar::Convolutional::BinarySequence<1, 0, 1, 1, 1, 0, 1>
+    Thiemar::BinarySequence<1, 1>,
+    Thiemar::BinarySequence<1, 1, 1, 0, 0, 1, 1>,
+    Thiemar::BinarySequence<1, 0, 1, 1, 1, 0, 1>
 >;
 
 TEST(ConvolutionalEncoderTest, Encode) {
@@ -39,9 +39,9 @@ TEST(ConvolutionalEncoderTest, Encode) {
 
 using TestEncoderPunctured = Thiemar::Convolutional::PuncturedConvolutionalEncoder<
     7u,
-    Thiemar::Convolutional::BinarySequence<1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0>,
-    Thiemar::Convolutional::BinarySequence<1, 1, 1, 0, 0, 1, 1>,
-    Thiemar::Convolutional::BinarySequence<1, 0, 1, 1, 1, 0, 1>
+    Thiemar::BinarySequence<1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0>,
+    Thiemar::BinarySequence<1, 1, 1, 0, 0, 1, 1>,
+    Thiemar::BinarySequence<1, 0, 1, 1, 1, 0, 1>
 >;
 
 TEST(PuncturedConvolutionalEncoderTest, Encode) {

@@ -73,7 +73,17 @@ class PuncturedConvolutionalEncoder {
     static_assert(sizeof(bool_vec_t) * 8u / PuncturingMatrix::ones() > 0u,
         "Word size must be large enough to fit at least one puncturing matrix cycle");
 
-    using interleaver = Interleaver<PuncturingMatrix, typename... Polynomials, block_size()>;
+    /*
+    Number of input bytes processed per call of encode_block. This number is
+    calculated to generate an integer number of output bytes.
+    */
+    static constexpr std::size_t block_size() {
+        std::size_t puncturing_row_len = PuncturingMatrix::size() / sizeof...(Polynomials);
+        return sizeof(bool_vec_t) > puncturing_row_len ? (sizeof(bool_vec_t) / puncturing_row_len) * puncturing_row_len :
+            puncturing_row_len;
+    }
+
+    using interleaver = Interleaver<PuncturingMatrix, sizeof...(Polynomials), block_size()>;
 
     /*
     Pull in a number of data bits from 'in' corresponding to the size of the
@@ -178,13 +188,22 @@ defined(__THUMBEL__)
     }
 
     /*
-    Number of input bytes processed per call of encode_block. This number is
-    calculated to generate an integer number of output bytes.
+    Efficiently encode a block of bytes. The number of bytes read from 'in'
+    will be equal to block_size(), and the number of bytes written to 'out'
+    will be equal to the number of input bytes multipled by the reciprocal
+    of the code rate.
     */
-    static constexpr std::size_t block_size() {
-        std::size_t puncturing_row_len = PuncturingMatrix::size() / sizeof...(Polynomials);
-        return sizeof(bool_vec_t) > puncturing_row_len ? (sizeof(bool_vec_t) / puncturing_row_len) * puncturing_row_len :
-            puncturing_row_len;
+    static void encode_block(std::size_t in_idx, const uint8_t *in, uint8_t *out) {
+        bool_vec_t conv_vec[interleaver::in_buf_len()] = {0};
+
+        std::size_t n_conv = block_size() / sizeof(bool_vec_t) + ((block_size() % sizeof(bool_vec_t)) ? 1u : 0u);
+
+        for (std::size_t i = 0u; i < n_conv; i++) {
+            process_data(in_idx + i*sizeof(bool_vec_t), in, block_size() - i*sizeof(bool_vec_t),
+                &conv_vec[i*sizeof...(Polynomials)], std::make_index_sequence<ConstraintLength>{});
+        }
+
+        interleaver::interleave(conv_vec, out);
     }
 
 public:
@@ -221,32 +240,16 @@ public:
         Use temporary arrays to allow input and output lengths of sizes which
         aren't integer multiples of the block size.
         */
-        interleaver::in_buf_len()
-        interleaver::out_buf_len()
-    }
+        std::size_t out_idx = 0u;
+        for (std::size_t i = 0u; i < len; i += block_size()) {
+            uint8_t out_block[interleaver::out_buf_len()] = {0};
 
-    /*
-    Efficiently encode a block of bytes. The number of bytes read from 'in'
-    will be equal to block_size(), and the number of bytes written to 'out'
-    will be equal to the number of input bytes multipled by the reciprocal
-    of the code rate.
-    */
-    static std::size_t encode_block(const uint8_t *in, uint8_t *out) {
-        bool_vec_t conv_vec[sizeof...(Polynomials) * interleaver::num_iterations()] = {};
+            encode_block(i, input, out_block);
+            std::memcpy(&out[out_idx], out_block, interleaver::out_buf_len());
+            out_idx += interleaver::out_buf_len();
+        }
 
-        process_data(i, input, len - i, conv_vec, std::make_index_sequence<ConstraintLength>{});
-
-        int _[] = { (out_idx += extract_bits<PolyIndices>(
-            in_idx + (i * sizeof...(Polynomials)), (sizeof(bool_vec_t) * 8u)-1u - i, in, out_idx, out), 0)... };
-        (void)_;
-
-        /*
-        Pack the appropriate number of bits into a bool_vec_t for the
-        interleaver.
-        */
-        interleaver::out_buf_len()
-
-        interleaver::interleave(conv_vec, out_idx, out, std::make_index_sequence<blah>{});
+        return out_idx;
     }
 };
 
