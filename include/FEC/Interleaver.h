@@ -22,10 +22,9 @@ SOFTWARE.
 
 #pragma once
 
+#include <algorithm>
 #include <array>
-#include <bitset>
 #include <cstddef>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -101,6 +100,20 @@ namespace Detail {
     struct DiffIndexSequence<std::index_sequence<Is1...>, std::index_sequence<Is2...>> {
         using type = std::index_sequence<Is1 - Is2...>;
     };
+
+    template <std::size_t... MaskIndices>
+    constexpr bool_vec_t mask_lsb(std::index_sequence<MaskIndices...>) {
+        bool_vec_t mask = 0u;
+        for (std::size_t i : { MaskIndices... }) {
+            mask |= (bool_vec_t)0xffu << (sizeof(bool_vec_t)-1u - i);
+        }
+
+        return mask;
+    }
+
+    constexpr bool_vec_t mask_bits(std::size_t N) {
+        return ~(((bool_vec_t)1u << (sizeof(bool_vec_t) * 8u - N)) - 1u);
+    }
 
     template <std::size_t... MaskIndices>
     constexpr bool_vec_t mask_from_index_sequence(std::index_sequence<MaskIndices...>) {
@@ -194,21 +207,17 @@ namespace Convolutional {
 /* Class to do arbitrary bitwise interleaving. */
 template <typename PuncturingMatrix, std::size_t NumPoly, std::size_t BlockSize>
 class Interleaver {
+    static_assert(BlockSize > 0u, "Block size must be at least 1 byte");
     static_assert(NumPoly > 1u, "Minimum of two polynomials are required");
     static_assert(PuncturingMatrix::size() % NumPoly == 0u,
         "Puncturing matrix size must be an integer multiple of the code rate");
     static_assert(PuncturingMatrix::size() > 0u, "Puncturing matrix size must be larger than zero");
     static_assert(sizeof(bool_vec_t) * 8u / PuncturingMatrix::ones() > 0u,
         "Word size must be large enough to fit at least one puncturing matrix cycle");
+    static_assert(!(BlockSize % (PuncturingMatrix::size() / NumPoly)),
+        "Block size must correspond to an integer number of puncturing matrix cycles");
 
     /* Calculate number of bits per stream consumed per interleaver cycle. */
-    static constexpr std::size_t num_in_bits(std::size_t rem_bits) {
-        std::size_t max_bits = sizeof(bool_vec_t) * 8u * (PuncturingMatrix::size() / NumPoly) /
-            PuncturingMatrix::ones();
-
-        return std::min((max_bits / (PuncturingMatrix::size() / NumPoly)) * (PuncturingMatrix::size() / NumPoly), rem_bits);
-    }
-
     static constexpr std::size_t num_in_bits() {
         std::size_t max_bits = sizeof(bool_vec_t) * 8u * (PuncturingMatrix::size() / NumPoly) /
             PuncturingMatrix::ones();
@@ -229,12 +238,13 @@ class Interleaver {
     }
 
     /* Calculate number of output bits produced per interleaver cycle. */
-    template <std::size_t N>
     static constexpr std::size_t num_out_bits() {
-        static_assert(!(N % (PuncturingMatrix::size() / NumPoly)),
-            "Interleaver needs an integer number of puncturing matrix cycles");
+        return (num_in_bits() * PuncturingMatrix::ones()) / (PuncturingMatrix::size() / NumPoly);
+    }
 
-        return N * PuncturingMatrix::ones() / (PuncturingMatrix::size() / NumPoly);
+    /* Number of interleaver iterations required to complete a block. */
+    static constexpr std::size_t num_iterations() {
+        return std::max(BlockSize * 8u / num_in_bits() + ((BlockSize * 8u % num_in_bits()) ? 1u : 0u), (std::size_t)1u);
     }
 
     template <std::size_t PolyIndex>
@@ -245,27 +255,67 @@ class Interleaver {
     using output_index_sequence = typename Detail::UnwrappedOutputIndexSequence<PuncturingMatrix, NumPoly, PolyIndex,
         std::make_index_sequence<num_poly_bits<PolyIndex>()>>::type;
 
-    // template <std::size_t... I>
-    // static void do_interleave_iterations(std::index_sequence<I...>) {
-    //     int _[] = { (blah, 0)... };
-    //     (void)_;
-    // }
+    /* Interleaves a block of bool_vec_t. */
+    template <std::size_t... I, std::size_t... O>
+    static void interleave_block(const bool_vec_t *in, uint8_t *out, std::index_sequence<I...>, std::index_sequence<O...>) {
+        bool_vec_t out_vec[sizeof...(I)];
 
-public:
-    /* Number of interleaver cycles required for the given block size. */
-    static constexpr std::size_t num_iterations() {
-        return (BlockSize * 8u) % num_in_bits() ? ((BlockSize * 8u) / num_in_bits()) + 1u : (BlockSize * 8u) / num_in_bits();
+        /* Pack bits into input vector and interleave. */
+        int _1[] = { (out_vec[I] = pack_and_spread_vec<I>(in, std::make_index_sequence<NumPoly>{}), 0)... };
+        (void)_1;
+
+        /* Pack interleaved bits into output buffer. */
+        int _2[] = { (pack_out_vec<O>(out_vec, out), 0)... };
+        (void)_2;
     }
 
     /*
-    Takes an array of bool_vec_t of size NumPoly, each packed with N bits,
-    where N is an integer multiple of the puncturing matrix row length.
+    Pack bits from 'in' into a bool_vec_t array such that they are aligned
+    correctly, and then call spread_words.
     */
-    template <std::size_t N, std::size_t... PolyIndices>
-    static bool_vec_t interleave(const bool_vec_t *in, std::index_sequence<PolyIndices...>) {
-        static_assert(!(N % (PuncturingMatrix::size() / NumPoly)),
-            "Interleaver input vectors must have an integer number of puncturing matrix cycles");
+    template <std::size_t I, std::size_t... PolyIndices>
+    static bool_vec_t pack_and_spread_vec(const bool_vec_t *in, std::index_sequence<PolyIndices...>) {
+        bool_vec_t in_vec[NumPoly];
+        std::size_t coarse_offset = ((I * num_in_bits()) / (sizeof(bool_vec_t) * 8u)) * NumPoly;
+        std::size_t fine_offset = (I * num_in_bits()) % (sizeof(bool_vec_t) * 8u);
 
+        int _1[] = { (in_vec[PolyIndices] = in[coarse_offset + PolyIndices] << fine_offset, 0)... };
+        (void)_1;
+
+        if (coarse_offset < in_buf_len() - NumPoly) {
+            int _2[] = { (in_vec[PolyIndices] |=
+                in[coarse_offset + PolyIndices + 1u] >> (sizeof(bool_vec_t) * 8u - fine_offset), 0)... };
+            (void)_2;
+        }
+
+        int _3[] = { (in_vec[PolyIndices] &= Detail::mask_bits(num_in_bits()), 0)... };
+        (void)_3;
+
+        return spread_words(in_vec, std::index_sequence<PolyIndices...>{});
+    }
+
+    /* Pack 8 bits from 'in' into a single output byte. */
+    template <std::size_t I>
+    static void pack_out_vec(const bool_vec_t *in, uint8_t *out) {
+        std::size_t coarse_offset = (I * 8u) / num_out_bits();
+        std::size_t fine_offset = (I * 8u) % num_out_bits();
+
+        out[I] = (in[coarse_offset] & Detail::mask_bits(num_out_bits())) >> ((sizeof(bool_vec_t)-1u) * 8u - fine_offset);
+
+        if (num_out_bits() - fine_offset < 8u && coarse_offset < out_buf_len() - 1u) {
+            out[I] |= (in[coarse_offset+1u] >> (fine_offset + num_out_bits() - fine_offset));
+        }
+    }
+
+    /*
+    Packs an array of bool_vec_t of size NumPoly into a single bool_vec_t.
+
+    For this to work properly, only the N most significant bits of each
+    element of in should be populated, where N is the number of bits in
+    bool_vec_t multiplied by the code rate.
+    */
+    template <std::size_t... PolyIndices>
+    static bool_vec_t spread_words(const bool_vec_t *in, std::index_sequence<PolyIndices...>) {
         bool_vec_t out = 0u;
         int _[] = { (out |= Detail::spread_word<sizeof(bool_vec_t) * 8u / 2u>(
             in[PolyIndices], input_index_sequence<PolyIndices>{},
@@ -277,28 +327,33 @@ public:
         return out;
     }
 
-    // template <std::size_t... I>
-    // static void print_helper(std::index_sequence<I...>) {
-    //     for (std::size_t i : { I... }) {
-    //         printf("%lu, ", i);
-    //     }
-    //     printf("\n");
-    // }
+public:
+    /*
+    Size (in bool_vec_t) of the input buffer required to supply a full
+    interleave block operation.
+    */
+    static constexpr std::size_t in_buf_len() {
+        return NumPoly * (BlockSize / sizeof(bool_vec_t) + ((BlockSize % sizeof(bool_vec_t)) ? 1u : 0u));
+    }
 
-    // static void print_info() {
-    //     printf("input, stream 0: ");
-    //     print_helper(input_index_sequence<0u>{});
-    //     printf("input, stream 1: ");
-    //     print_helper(input_index_sequence<1u>{});
-    //     printf("output, stream 0: ");
-    //     print_helper(output_index_sequence<0u>{});
-    //     printf("output, stream 1: ");
-    //     print_helper(output_index_sequence<1u>{});
-    // }
+    /*
+    Size (in bytes) of the output buffer required to supply a full interleave
+    block operation.
+    */
+    static constexpr std::size_t out_buf_len() {
+        return BlockSize * PuncturingMatrix::ones() / (PuncturingMatrix::size() / NumPoly);
+    }
 
-    // static void interleave_bits(const bool_vec_t *in, uint8_t *out) {
-    //     do_interleave_iterations()
-    // }
+    /*
+    Interleaves a block of bool_vec_t. The input buffer must have a length
+    equal to at least in_buf_len, and the output buffer must have a length
+    equal to at least out_buf_len.
+    */
+    static void interleave(const bool_vec_t *in, uint8_t *out) {
+        interleave_block(in, out,
+            std::make_index_sequence<num_iterations()>{},
+            std::make_index_sequence<out_buf_len()>{});
+    }
 };
 
 }

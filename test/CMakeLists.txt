@@ -26,7 +26,8 @@ INCLUDE_DIRECTORIES(${googletest_dir}/include ${fecmagic_dir}/src ../include)
 
 # Add test executable target
 ADD_EXECUTABLE(unittest
-    TestInterleaver.cpp)
+    TestInterleaver.cpp
+    TestConvolutionalEncoder.cpp)
 
 # Create dependency of test on googletest
 ADD_DEPENDENCIES(unittest googletest fecmagic)

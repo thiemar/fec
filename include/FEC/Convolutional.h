@@ -22,10 +22,7 @@ SOFTWARE.
 
 #pragma once
 
-#include <array>
-#include <bitset>
 #include <cstddef>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -40,17 +37,6 @@ namespace Detail {
     template <bool...> struct bool_pack;
     template <bool... v>
     using all_true = std::is_same<bool_pack<true, v...>, bool_pack<v..., true>>;
-
-    template <std::size_t... MaskIndices>
-    constexpr bool_vec_t mask_lsb(std::index_sequence<MaskIndices...>) {
-        bool_vec_t mask = 0u;
-        for (std::size_t i : { MaskIndices... }) {
-            mask |= (bool_vec_t)0xffu << (sizeof(bool_vec_t)-1u - i);
-        }
-
-        return mask;
-    }
-
 }
 
 namespace Convolutional {
@@ -87,7 +73,7 @@ class PuncturedConvolutionalEncoder {
     static_assert(sizeof(bool_vec_t) * 8u / PuncturingMatrix::ones() > 0u,
         "Word size must be large enough to fit at least one puncturing matrix cycle");
 
-    using interleaver = Interleaver<PuncturingMatrix, typename... Polynomials, min_block_size()>;
+    using interleaver = Interleaver<PuncturingMatrix, typename... Polynomials, block_size()>;
 
     /*
     Pull in a number of data bits from 'in' corresponding to the size of the
@@ -195,7 +181,7 @@ defined(__THUMBEL__)
     Number of input bytes processed per call of encode_block. This number is
     calculated to generate an integer number of output bytes.
     */
-    static constexpr std::size_t min_block_size() {
+    static constexpr std::size_t block_size() {
         std::size_t puncturing_row_len = PuncturingMatrix::size() / sizeof...(Polynomials);
         return sizeof(bool_vec_t) > puncturing_row_len ? (sizeof(bool_vec_t) / puncturing_row_len) * puncturing_row_len :
             puncturing_row_len;
@@ -229,41 +215,23 @@ public:
     /*
     Do efficient convolutional encoding by carrying out a number of
     convolutions in parallel equal to the word size.
-
-    Need to interleave the output and carry out puncturing, which adds some
-    overhead.
     */
     static std::size_t encode(const uint8_t *input, std::size_t len, uint8_t *out) {
-        std::size_t num_out_bits = 0u, num_in_bits = 0u;
-
-        for (std::size_t i = 0u; i < len + ConstraintLength / 8u + (ConstraintLength % 8u ? 1u : 0u); i += sizeof(bool_vec_t)) {
-            bool_vec_t conv_vec[sizeof...(Polynomials)] = {};
-
-            /*
-            Iterate over constraint length, XORing shifted data into the
-            corresponding working vector for each polynomial when the
-            index matches a set bit in the polynomial.
-            */
-            process_data(i, input, len - i, conv_vec, std::make_index_sequence<ConstraintLength>{});
-
-            /*
-            Pack the resulting bits into the output buffer using the
-            puncturing matrix.
-            */
-            num_out_bits = pack_output_bits(num_in_bits, conv_vec, num_out_bits, out,
-                std::make_index_sequence<sizeof...(Polynomials)>{});
-            num_in_bits += sizeof(bool_vec_t) * sizeof...(Polynomials) * 8u;
-        }
-
-        return num_out_bits;
+        /*
+        Use temporary arrays to allow input and output lengths of sizes which
+        aren't integer multiples of the block size.
+        */
+        interleaver::in_buf_len()
+        interleaver::out_buf_len()
     }
 
     /*
-    Efficiently encode a block of bytes of size equal to the constraint
-    length multiplied by the size of bool_vec_t in bytes.
+    Efficiently encode a block of bytes. The number of bytes read from 'in'
+    will be equal to block_size(), and the number of bytes written to 'out'
+    will be equal to the number of input bytes multipled by the reciprocal
+    of the code rate.
     */
-    template <std::size_t... PolyIndices>
-    static void encode_block(std::size_t in_idx, const bool_vec_t *in, std::size_t out_idx, uint8_t *out) {
+    static std::size_t encode_block(const uint8_t *in, uint8_t *out) {
         bool_vec_t conv_vec[sizeof...(Polynomials) * interleaver::num_iterations()] = {};
 
         process_data(i, input, len - i, conv_vec, std::make_index_sequence<ConstraintLength>{});
@@ -272,15 +240,13 @@ public:
             in_idx + (i * sizeof...(Polynomials)), (sizeof(bool_vec_t) * 8u)-1u - i, in, out_idx, out), 0)... };
         (void)_;
 
-        /* Mask off unwanted bits. */
-        mask_lsb(std::make_index_sequence<min_block_size() % sizeof(bool_vec_t)>{})
-
         /*
         Pack the appropriate number of bits into a bool_vec_t for the
         interleaver.
         */
+        interleaver::out_buf_len()
 
-        interleave_bits(conv_vec, out_idx, out, std::make_index_sequence<blah>{});
+        interleaver::interleave(conv_vec, out_idx, out, std::make_index_sequence<blah>{});
     }
 };
 
