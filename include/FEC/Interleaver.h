@@ -161,9 +161,11 @@ namespace Detail {
         greater than or equal to ShiftIndex.
         */
         using new_input_sequence = std::index_sequence<DiffIndices >= 1u ? InputIndices + 1u : InputIndices...>;
-        using mask_sequence = std::index_sequence<DiffIndices >= 1u ? InputIndices : sizeof(bool_vec_t)...>;
+        using mask_shift = std::index_sequence<DiffIndices >= 1u ? InputIndices : sizeof(bool_vec_t)...>;
+        using mask_static = std::index_sequence<DiffIndices < 1u ? InputIndices : sizeof(bool_vec_t)...>;
 
-        return (in | (in & mask_from_index_sequence(mask_sequence{})) >> 1u) & mask_from_index_sequence(new_input_sequence{});
+        return ((in & mask_from_index_sequence(mask_static{})) | (in & mask_from_index_sequence(mask_shift{})) >> 1u) &
+            mask_from_index_sequence(new_input_sequence{});
     }
 
     /*
@@ -185,7 +187,8 @@ namespace Detail {
         greater than or equal to ShiftIndex.
         */
         using new_input_sequence = std::index_sequence<DiffIndices >= ShiftIndex ? InputIndices + ShiftIndex : InputIndices...>;
-        using mask_sequence = std::index_sequence<DiffIndices >= ShiftIndex ? InputIndices : sizeof(bool_vec_t)...>;
+        using mask_shift = std::index_sequence<DiffIndices >= ShiftIndex ? InputIndices : sizeof(bool_vec_t)...>;
+        using mask_static = std::index_sequence<DiffIndices < ShiftIndex ? InputIndices : sizeof(bool_vec_t)...>;
 
         /*
         Subtract ShiftIndex from DiffIndices which are greater than or equal
@@ -197,7 +200,8 @@ namespace Detail {
         Create the mask from InputIndices and apply it after the shift
         operation.
         */
-        return spread_word<ShiftIndex / 2u>((in | (in & mask_from_index_sequence(mask_sequence{})) >> ShiftIndex) &
+        return spread_word<ShiftIndex / 2u>(((in & mask_from_index_sequence(mask_static{})) |
+            (in & mask_from_index_sequence(mask_shift{})) >> ShiftIndex) &
             mask_from_index_sequence(new_input_sequence{}), new_input_sequence{}, new_diff_sequence{});
     }
 }
