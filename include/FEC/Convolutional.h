@@ -87,61 +87,34 @@ class PuncturedConvolutionalEncoder {
 
     /*
     Pull in a number of data bits from 'in' corresponding to the size of the
-    bool_vec_t data type. The 'len' argument refers to the number of bytes
-    available from 'in'. If the limit is reached, zero-padding is used to
-    fill the working vector.
+    bool_vec_t data type.
     */
     template <std::size_t... ConstraintIndices>
-    static void process_data(std::size_t in_idx, const uint8_t *in, std::size_t len, bool_vec_t *out,
-            std::index_sequence<ConstraintIndices...>) {
+    static void process_data(const uint8_t *in, bool_vec_t *out, std::index_sequence<ConstraintIndices...>) {
         /*
         Number of bytes from the input buffer that we need is determined by
         the working vector size and the constraint length index.
         */
-        int _[] = { (calculate_convolutions<ConstraintIndices % 8u>(
-            in_idx + ConstraintIndices / 8u, in, len, out,
-            std::make_index_sequence<sizeof...(Polynomials)>{}), 0)... };
+        int _[] = { (calculate_convolutions<ConstraintIndices>(in, out,
+            std::make_index_sequence<sizeof...(Polynomials)>{}, std::make_index_sequence<sizeof(bool_vec_t)>{}), 0)... };
         (void)_;
     }
 
-    template <std::size_t Shift, std::size_t... PolyIndices>
-    static void calculate_convolutions(std::size_t start_idx, const uint8_t *in, std::size_t end_idx, bool_vec_t *out,
-            std::index_sequence<PolyIndices...>) {
-        bool_vec_t cur_vec = 0u;
+    template <std::size_t ConstraintIndex, std::size_t... PolyIndices, std::size_t... ByteIndices>
+    static void calculate_convolutions(const uint8_t *in, bool_vec_t *out,
+            std::index_sequence<PolyIndices...>, std::index_sequence<ByteIndices...>) {
+        constexpr std::size_t coarse_offset = ConstraintIndex / 8u;
+        constexpr std::size_t fine_offset = ConstraintIndex % 8u;
 
-        for (std::size_t i = 0u; i < sizeof(bool_vec_t); i++) {
-            uint8_t temp;
-            if (i + start_idx >= end_idx) {
-                temp = in[i + start_idx - 1u] << (8u - Shift);
-            } else {
-                if (Shift) {
-                    temp = in[i + start_idx] >> Shift;
-                    temp |= in[i + start_idx - 1u] << (8u - Shift);
-                } else {
-                    temp = in[i + start_idx];
-                }
-            }
-
-#if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN || \
-defined(__BIG_ENDIAN__) || \
-defined(__ARMEB__) || \
-defined(__THUMBEB__)
-            /* Get input data from the buffer (big-endian). */
-            ((uint8_t *)&cur_vec)[i] = temp;
-#elif defined(__BYTE_ORDER) && __BYTE_ORDER == __LITTLE_ENDIAN || \
-defined(__LITTLE_ENDIAN__) || \
-defined(__ARMEL__) || \
-defined(__THUMBEL__)
-            /* Get input data from the buffer (little-endian). */
-            ((uint8_t *)&cur_vec)[sizeof(cur_vec)-1u - i] = temp;
-#else
-#error "Unable to detect endianness"
-#endif
-        }
+        /* Pack data into working vector. */
+        bool_vec_t cur_vec = ((bool_vec_t)in[coarse_offset - 1] << ((sizeof(bool_vec_t)-1u) * 8u)) << (8u - fine_offset);
+        int _1[] = { (cur_vec |= ((bool_vec_t)in[ByteIndices + coarse_offset] <<
+            ((sizeof(bool_vec_t)-1u - ByteIndices) * 8u)) >> fine_offset, 0)... };
+        (void)_1;
 
         /* Calculate applicable polynomial taps. */
-        int _[] = { (calculate_taps<ConstraintLength-1u - Shift, Polynomials, PolyIndices>(cur_vec, out), 0)... };
-        (void)_;
+        int _2[] = { (calculate_taps<ConstraintLength-1u - fine_offset, Polynomials, PolyIndices>(cur_vec, out), 0)... };
+        (void)_2;
     }
 
     /* For the given polynomial, carry out an XOR if this bit is set. */
@@ -164,10 +137,10 @@ defined(__THUMBEL__)
     static void encode_block(const uint8_t *in, uint8_t *out) {
         bool_vec_t conv_vec[interleaver::in_buf_len()] = {0};
 
-        std::size_t n_conv = block_size() / sizeof(bool_vec_t) + ((block_size() % sizeof(bool_vec_t)) ? 1u : 0u);
+        constexpr std::size_t n_conv = block_size() / sizeof(bool_vec_t) + ((block_size() % sizeof(bool_vec_t)) ? 1u : 0u);
 
         for (std::size_t i = 0u; i < n_conv; i++) {
-            process_data(i*sizeof(bool_vec_t), in, block_size() - i*sizeof(bool_vec_t),
+            process_data(&in[i*sizeof(bool_vec_t)],
                 &conv_vec[i*sizeof...(Polynomials)], std::make_index_sequence<ConstraintLength>{});
         }
 
