@@ -215,7 +215,7 @@ class Interleaver {
 
     /* Calculate number of bits per stream consumed per interleaver cycle. */
     static constexpr std::size_t num_in_bits() {
-        std::size_t max_bits = sizeof(bool_vec_t) * 8u * (PuncturingMatrix::size() / NumPoly) /
+        constexpr std::size_t max_bits = sizeof(bool_vec_t) * 8u * (PuncturingMatrix::size() / NumPoly) /
             PuncturingMatrix::ones();
 
         return (max_bits / (PuncturingMatrix::size() / NumPoly)) * (PuncturingMatrix::size() / NumPoly);

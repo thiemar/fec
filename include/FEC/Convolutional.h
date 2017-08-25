@@ -99,7 +99,7 @@ class PuncturedConvolutionalEncoder {
         the working vector size and the constraint length index.
         */
         int _[] = { (calculate_convolutions<ConstraintIndices % 8u>(
-            in_idx + ConstraintIndices / 8u, in, in_idx + len, out,
+            in_idx + ConstraintIndices / 8u, in, len, out,
             std::make_index_sequence<sizeof...(Polynomials)>{}), 0)... };
         (void)_;
     }
@@ -112,16 +112,11 @@ class PuncturedConvolutionalEncoder {
         for (std::size_t i = 0u; i < sizeof(bool_vec_t); i++) {
             uint8_t temp;
             if (i + start_idx >= end_idx) {
-                temp = 0u;
-                if (i + start_idx >= 1u) {
-                    temp |= in[i + start_idx - 1u] << (8u - Shift);
-                }
+                temp = in[i + start_idx - 1u] << (8u - Shift);
             } else {
                 if (Shift) {
                     temp = in[i + start_idx] >> Shift;
-                    if (i + start_idx >= 1u) {
-                        temp |= in[i + start_idx - 1u] << (8u - Shift);
-                    }
+                    temp |= in[i + start_idx - 1u] << (8u - Shift);
                 } else {
                     temp = in[i + start_idx];
                 }
@@ -159,18 +154,20 @@ defined(__THUMBEL__)
     static typename std::enable_if_t<!Poly::template test<Shift>(), void> calculate_taps(bool_vec_t in, bool_vec_t *out) {}
 
     /*
-    Efficiently encode a block of bytes. The number of bytes read from 'in'
-    will be equal to block_size(), and the number of bytes written to 'out'
-    will be equal to the number of input bytes multipled by the reciprocal
-    of the code rate.
+    Efficiently encode a block of bytes. The 'in' buffer should point to a
+    buffer of size equal to the block size plus the minimum number of bytes
+    occupied by the constant length. The 'in' pointer should point to the
+    first byte of the block, so the leading constraint bytes are below the
+    'in' pointer in memory. If 'in' points to the start of the input data,
+    these bytes should be zero.
     */
-    static void encode_block(std::size_t max_idx, std::size_t in_idx, const uint8_t *in, uint8_t *out) {
+    static void encode_block(const uint8_t *in, uint8_t *out) {
         bool_vec_t conv_vec[interleaver::in_buf_len()] = {0};
 
         std::size_t n_conv = block_size() / sizeof(bool_vec_t) + ((block_size() % sizeof(bool_vec_t)) ? 1u : 0u);
 
         for (std::size_t i = 0u; i < n_conv; i++) {
-            process_data(in_idx + i*sizeof(bool_vec_t), in, max_idx - i*sizeof(bool_vec_t) - in_idx,
+            process_data(i*sizeof(bool_vec_t), in, block_size() - i*sizeof(bool_vec_t),
                 &conv_vec[i*sizeof...(Polynomials)], std::make_index_sequence<ConstraintLength>{});
         }
 
@@ -211,12 +208,16 @@ public:
         Use temporary arrays to allow input and output lengths of sizes which
         aren't integer multiples of the block size.
         */
+        constexpr std::size_t flush_bytes = ConstraintLength / 8u + ((ConstraintLength % 8u) ? 1u : 0u);
         std::size_t out_idx = 0u;
-        std::size_t num_bytes = len + (ConstraintLength / 8u) + ((ConstraintLength % 8u) ? 1u : 0u);
-        for (std::size_t i = 0u; i < num_bytes; i += block_size()) {
+        for (std::size_t i = 0u; i < len + flush_bytes; i += block_size()) {
+            uint8_t in_block[block_size() + flush_bytes] = {0};
             uint8_t out_block[interleaver::out_buf_len()] = {0};
 
-            encode_block(len, i, input, out_block);
+            std::memcpy(&in_block[flush_bytes - std::min(i, flush_bytes)],
+                &input[i - std::min(i, flush_bytes)],
+                std::min(block_size(), len - i) + std::min(i, flush_bytes));
+            encode_block(&in_block[flush_bytes], out_block);
             std::memcpy(&out[out_idx], out_block, interleaver::out_buf_len());
             out_idx += interleaver::out_buf_len();
         }
