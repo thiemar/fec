@@ -193,13 +193,13 @@ defined(__THUMBEL__)
     will be equal to the number of input bytes multipled by the reciprocal
     of the code rate.
     */
-    static void encode_block(std::size_t in_idx, const uint8_t *in, uint8_t *out) {
+    static void encode_block(std::size_t max_idx, std::size_t in_idx, const uint8_t *in, uint8_t *out) {
         bool_vec_t conv_vec[interleaver::in_buf_len()] = {0};
 
         std::size_t n_conv = block_size() / sizeof(bool_vec_t) + ((block_size() % sizeof(bool_vec_t)) ? 1u : 0u);
 
         for (std::size_t i = 0u; i < n_conv; i++) {
-            process_data(in_idx + i*sizeof(bool_vec_t), in, block_size() - i*sizeof(bool_vec_t),
+            process_data(in_idx + i*sizeof(bool_vec_t), in, max_idx - i*sizeof(bool_vec_t) - in_idx,
                 &conv_vec[i*sizeof...(Polynomials)], std::make_index_sequence<ConstraintLength>{});
         }
 
@@ -241,10 +241,11 @@ public:
         aren't integer multiples of the block size.
         */
         std::size_t out_idx = 0u;
-        for (std::size_t i = 0u; i < len; i += block_size()) {
+        std::size_t num_bytes = len + (ConstraintLength / 8u) + ((ConstraintLength % 8u) ? 1u : 0u);
+        for (std::size_t i = 0u; i < num_bytes; i += block_size()) {
             uint8_t out_block[interleaver::out_buf_len()] = {0};
 
-            encode_block(i, input, out_block);
+            encode_block(len, i, input, out_block);
             std::memcpy(&out[out_idx], out_block, interleaver::out_buf_len());
             out_idx += interleaver::out_buf_len();
         }
