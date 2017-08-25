@@ -159,39 +159,6 @@ defined(__THUMBEL__)
     static typename std::enable_if_t<!Poly::template test<Shift>(), void> calculate_taps(bool_vec_t in, bool_vec_t *out) {}
 
     /*
-    Unpack the index sequence corresponding to non-punctured bits, and pack
-    the corresponding bits from the input vector into the output buffer.
-
-    Return the number of bits packed into the output buffer.
-    */
-    template <std::size_t... PolyIndices>
-    static std::size_t pack_output_bits(std::size_t in_idx, const bool_vec_t *in, std::size_t out_idx, uint8_t *out,
-            std::index_sequence<PolyIndices...>) {
-        /* Iterate over all non-punctured bit indices. */
-        for (std::size_t i = 0u; i < sizeof(bool_vec_t) * 8u; i++) {
-            int _[] = { (out_idx += extract_bits<PolyIndices>(
-                in_idx + (i * sizeof...(Polynomials)), (sizeof(bool_vec_t) * 8u)-1u - i, in, out_idx, out), 0)... };
-            (void)_;
-        }
-
-        return out_idx;
-    }
-
-    template <std::size_t PolyIndex>
-    static std::size_t extract_bits(std::size_t in_bits, std::size_t in_idx, const bool_vec_t *in,
-            std::size_t out_idx, uint8_t *out) {
-        if (PuncturingMatrix::bits[(in_bits + PolyIndex) % PuncturingMatrix::size()]) {
-            out[out_idx / 8u] = in[PolyIndex] & ((bool_vec_t)1u << in_idx) ?
-                out[out_idx / 8u] | (1u << (7u - (out_idx % 8u))) :
-                out[out_idx / 8u] & ~(1u << (7u - (out_idx % 8u)));
-
-            return 1u;
-        } else {
-            return 0u;
-        }
-    }
-
-    /*
     Efficiently encode a block of bytes. The number of bytes read from 'in'
     will be equal to block_size(), and the number of bytes written to 'out'
     will be equal to the number of input bytes multipled by the reciprocal
