@@ -109,9 +109,7 @@ namespace Detail {
     constexpr bool_vec_t mask_from_index_sequence(std::index_sequence<MaskIndices...>) {
         bool_vec_t mask = 0u;
         for (std::size_t i : { MaskIndices... }) {
-            if (i < sizeof(bool_vec_t) * 8u) {
-                mask |= (bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u)-1u - i);
-            }
+            mask |= (i < sizeof(bool_vec_t) * 8u) ? (bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u)-1u - i) : 0u;
         }
 
         return mask;

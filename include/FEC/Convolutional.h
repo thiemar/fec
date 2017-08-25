@@ -151,11 +151,12 @@ defined(__THUMBEL__)
 
     /* For the given polynomial, carry out an XOR if this bit is set. */
     template <std::size_t Shift, typename Poly, std::size_t PolyIndex>
-    static void calculate_taps(bool_vec_t in, bool_vec_t *out) {
-        if (Poly::template test<Shift>()) {
-            out[PolyIndex] ^= in;
-        }
+    static typename std::enable_if_t<Poly::template test<Shift>(), void> calculate_taps(bool_vec_t in, bool_vec_t *out) {
+        out[PolyIndex] ^= in;
     }
+
+    template <std::size_t Shift, typename Poly, std::size_t PolyIndex>
+    static typename std::enable_if_t<!Poly::template test<Shift>(), void> calculate_taps(bool_vec_t in, bool_vec_t *out) {}
 
     /*
     Unpack the index sequence corresponding to non-punctured bits, and pack
