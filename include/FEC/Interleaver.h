@@ -101,16 +101,6 @@ namespace Detail {
         using type = std::index_sequence<Is1 - Is2...>;
     };
 
-    template <std::size_t... MaskIndices>
-    constexpr bool_vec_t mask_lsb(std::index_sequence<MaskIndices...>) {
-        bool_vec_t mask = 0u;
-        for (std::size_t i : { MaskIndices... }) {
-            mask |= (bool_vec_t)0xffu << (sizeof(bool_vec_t)-1u - i);
-        }
-
-        return mask;
-    }
-
     constexpr bool_vec_t mask_bits(std::size_t N) {
         return ~(((bool_vec_t)1u << (sizeof(bool_vec_t) * 8u - N)) - 1u);
     }
@@ -119,7 +109,7 @@ namespace Detail {
     constexpr bool_vec_t mask_from_index_sequence(std::index_sequence<MaskIndices...>) {
         bool_vec_t mask = 0u;
         for (std::size_t i : { MaskIndices... }) {
-            if (i < sizeof(bool_vec_t)*8u) {
+            if (i < sizeof(bool_vec_t) * 8u) {
                 mask |= (bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u)-1u - i);
             }
         }
@@ -163,10 +153,12 @@ namespace Detail {
         greater than or equal to ShiftIndex.
         */
         using new_input_sequence = std::index_sequence<DiffIndices >= 1u ? InputIndices + 1u : InputIndices...>;
-        using mask_shift = std::index_sequence<DiffIndices >= 1u ? InputIndices : sizeof(bool_vec_t)*8u ...>;
-        using mask_static = std::index_sequence<DiffIndices < 1u ? InputIndices : sizeof(bool_vec_t)*8u ...>;
+        constexpr bool_vec_t mask_shift = mask_from_index_sequence(
+            std::index_sequence<DiffIndices >= 1u ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
+        constexpr bool_vec_t mask_static = mask_from_index_sequence(
+            std::index_sequence<DiffIndices < 1u ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
 
-        return ((in & mask_from_index_sequence(mask_static{})) | (in & mask_from_index_sequence(mask_shift{})) >> 1u);
+        return (in & mask_static) | (in & mask_shift) >> 1u;
     }
 
     /*
@@ -188,8 +180,10 @@ namespace Detail {
         greater than or equal to ShiftIndex.
         */
         using new_input_sequence = std::index_sequence<DiffIndices >= ShiftIndex ? InputIndices + ShiftIndex : InputIndices...>;
-        using mask_shift = std::index_sequence<DiffIndices >= ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>;
-        using mask_static = std::index_sequence<DiffIndices < ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>;
+        constexpr bool_vec_t mask_shift = mask_from_index_sequence(
+            std::index_sequence<DiffIndices >= ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
+        constexpr bool_vec_t mask_static = mask_from_index_sequence(
+            std::index_sequence<DiffIndices < ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
 
         /*
         Subtract ShiftIndex from DiffIndices which are greater than or equal
@@ -201,8 +195,8 @@ namespace Detail {
         Create the mask from InputIndices and apply it after the shift
         operation.
         */
-        return spread_word<ShiftIndex / 2u>(((in & mask_from_index_sequence(mask_static{})) |
-            (in & mask_from_index_sequence(mask_shift{})) >> ShiftIndex), new_input_sequence{}, new_diff_sequence{});
+        return spread_word<ShiftIndex / 2u>((in & mask_static) | (in & mask_shift) >> ShiftIndex,
+            new_input_sequence{}, new_diff_sequence{});
     }
 }
 
@@ -292,7 +286,9 @@ class Interleaver {
             (void)_2;
         }
 
-        int _3[] = { (in_vec[PolyIndices] &= Detail::mask_bits(num_in_bits()), 0)... };
+        constexpr bool_vec_t mask = Detail::mask_bits(num_in_bits());
+
+        int _3[] = { (in_vec[PolyIndices] &= mask, 0)... };
         (void)_3;
 
         return spread_words(in_vec, std::index_sequence<PolyIndices...>{});
@@ -304,7 +300,9 @@ class Interleaver {
         std::size_t coarse_offset = (I * 8u) / num_out_bits();
         std::size_t fine_offset = (I * 8u) % num_out_bits();
 
-        out[I] = (in[coarse_offset] & Detail::mask_bits(num_out_bits())) >> ((sizeof(bool_vec_t)-1u) * 8u - fine_offset);
+        constexpr bool_vec_t mask = Detail::mask_bits(num_out_bits());
+
+        out[I] = (in[coarse_offset] & mask) >> ((sizeof(bool_vec_t)-1u) * 8u - fine_offset);
 
         if (num_out_bits() - fine_offset < 8u && coarse_offset < out_buf_len() - 1u) {
             out[I] |= (in[coarse_offset+1u] >> (fine_offset + num_out_bits() - fine_offset));
