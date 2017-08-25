@@ -111,8 +111,11 @@ class PuncturedConvolutionalEncoder {
 
         for (std::size_t i = 0u; i < sizeof(bool_vec_t); i++) {
             uint8_t temp;
-            if (i + start_idx > end_idx) {
+            if (i + start_idx >= end_idx) {
                 temp = 0u;
+                if (i + start_idx >= 1u) {
+                    temp |= in[i + start_idx - 1u] << (8u - Shift);
+                }
             } else {
                 if (Shift) {
                     temp = in[i + start_idx] >> Shift;
