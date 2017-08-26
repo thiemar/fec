@@ -22,15 +22,16 @@ LOG_BUILD ON)
 ExternalProject_Get_Property(googlebenchmark source_dir)
 SET(googlebenchmark_dir ${source_dir})
 
-INCLUDE_DIRECTORIES(${googlebenchmark_dir}/include ${fecmagic_dir}/src ../include)
+INCLUDE_DIRECTORIES(${googlebenchmark_dir}/include ${fecmagic_dir}/src ${ezpwd_rs_dir}/c++ ../include)
 
 # Add benchmark executable target
 ADD_EXECUTABLE(benchmark
     ConvolutionalEncoderBenchmark.cpp
+    ReedSolomonBenchmark.cpp
     BenchmarkMain.cpp)
 
 # Create dependency of benchmark on googlebenchmark
-ADD_DEPENDENCIES(benchmark googlebenchmark fecmagic)
+ADD_DEPENDENCIES(benchmark googlebenchmark fecmagic ezpwd_rs)
 
 # Specify benchmark's link libraries
 ExternalProject_Get_Property(googlebenchmark binary_dir)
