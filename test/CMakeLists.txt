@@ -22,15 +22,17 @@ LOG_BUILD ON)
 ExternalProject_Get_Property(googletest source_dir)
 SET(googletest_dir ${source_dir})
 
-INCLUDE_DIRECTORIES(${googletest_dir}/include ${fecmagic_dir}/src ../include)
+INCLUDE_DIRECTORIES(${googletest_dir}/include ${fecmagic_dir}/src ${ezpwd_rs_dir}/c++ ../include)
 
 # Add test executable target
 ADD_EXECUTABLE(unittest
     TestInterleaver.cpp
-    TestConvolutionalEncoder.cpp)
+    TestConvolutionalEncoder.cpp
+    TestGaloisField.cpp
+    TestReedSolomonEncoder.cpp)
 
 # Create dependency of test on googletest
-ADD_DEPENDENCIES(unittest googletest fecmagic)
+ADD_DEPENDENCIES(unittest googletest fecmagic ezpwd_rs)
 
 # Specify test's link libraries
 ExternalProject_Get_Property(googletest binary_dir)

@@ -32,7 +32,15 @@ SOFTWARE.
 namespace Thiemar {
 
 namespace Detail {
-    /* Concatenate two integer sequences, with an offset for the second. */
+    /* Switch a bit index sequence to reverse. */
+    template <std::size_t N, typename Seq> struct reverse_seq;
+
+    template<std::size_t N, std::size_t... Is>
+    struct reverse_seq<N, std::index_sequence<Is...>> {
+        using index_sequence = std::index_sequence<N - Is...>;
+    };
+
+    /* Concatenate two integer sequences. */
     template <typename Seq1, typename Seq2> struct concat_seq;
 
     template <std::size_t... Is1, std::size_t... Is2>
@@ -123,7 +131,9 @@ class BinarySequence {
 public:
     using index_sequence = std::make_index_sequence<sizeof...(Bits)>;
     using ones_index_sequence = typename Detail::OneIndices<0u, Bits...>::index_sequence;
+    using ones_index_sequence_reversed = typename Detail::reverse_seq<sizeof...(Bits)-1u, ones_index_sequence>::index_sequence;
     using zeroes_index_sequence = typename Detail::ZeroIndices<0u, Bits...>::index_sequence;
+    using zeroes_index_sequence_reversed = typename Detail::reverse_seq<sizeof...(Bits)-1u, zeroes_index_sequence>::index_sequence; 
 
     static constexpr std::size_t size() { return sizeof...(Bits); }
     static constexpr std::size_t ones() { return ones_index_sequence::size(); }

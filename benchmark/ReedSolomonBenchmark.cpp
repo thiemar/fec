@@ -5,7 +5,7 @@
 #include <ezpwd/rs>
 
 #define MESSAGE_PARITY_LENGTH 32u
-#define MESSAGE_DATA_LENGTH 223u
+#define MESSAGE_DATA_LENGTH 95u
 
 void EZPWD_ReedSolomonEncoder_Encode(benchmark::State& state) {
     ezpwd::RS<255u, 255u-MESSAGE_PARITY_LENGTH> rs;
