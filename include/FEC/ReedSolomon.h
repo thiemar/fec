@@ -39,16 +39,22 @@ namespace Polynomials {
     using m_8_301 = BinarySequence<1, 0, 0, 1, 0, 1, 1, 0, 1>;
 }
 
-template <std::size_t M, typename Generator, std::size_t Parity>
+template <std::size_t M, typename Primitive, std::size_t Parity>
 class ReedSolomonEncoder {
     static_assert(Parity > 1u && Parity < (1u << M) - 1u,
         "Parity must be positive and smaller than the field size");
 
-    using galois_field = GaloisField<M, Generator>;
+    using galois_field = GaloisField<M, Primitive>;
     using gf_t = typename galois_field::gf_t;
 
 public:
+    /*
+    Calculate parity for up to (2^M - Parity) message bytes from 'input',
+    placing the parity bytes at the end of the message bytes.
+    */
+    static std::size_t encode(std::size_t len, const uint8_t *buf) {
 
+    }
 };
 
 }

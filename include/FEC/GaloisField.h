@@ -65,12 +65,12 @@ namespace Detail {
 }
 
 /* Class for doing arithmetic operations in the specified Galois field. */
-template <typename T, std::size_t M, typename Generator>
+template <typename T, std::size_t M, typename Primitive>
 class GaloisFieldImpl {
     static_assert(M >= 1u && M <= 16u, "Galois field order must be between 2^1 and 2^16");
 
     static constexpr std::size_t gen_poly = Detail::integer_from_index_sequence<std::size_t>(
-        (typename Generator::ones_index_sequence_reversed){});
+        (typename Primitive::ones_index_sequence_reversed){});
 
     /*
     Get an array containing the elements of the Galois field in
@@ -121,24 +121,24 @@ public:
     }
 };
 
-template <typename T, std::size_t M, typename Generator>
-constexpr std::array<T, 1u << M> GaloisFieldImpl<T, M, Generator>::antilog_table;
+template <typename T, std::size_t M, typename Primitive>
+constexpr std::array<T, 1u << M> GaloisFieldImpl<T, M, Primitive>::antilog_table;
 
-template <typename T, std::size_t M, typename Generator>
-constexpr std::array<T, 1u << M> GaloisFieldImpl<T, M, Generator>::log_table;
+template <typename T, std::size_t M, typename Primitive>
+constexpr std::array<T, 1u << M> GaloisFieldImpl<T, M, Primitive>::log_table;
 
 /*
 Selects the appropriate type for the Galois field primitive based on the
 order of the field.
 */
-template <std::size_t M, typename Generator> class GaloisField;
-template <typename Generator> class GaloisField<1u, Generator> : public GaloisFieldImpl<uint8_t, 1u, Generator> {};
-template <typename Generator> class GaloisField<2u, Generator> : public GaloisFieldImpl<uint8_t, 2u, Generator> {};
-template <typename Generator> class GaloisField<3u, Generator> : public GaloisFieldImpl<uint8_t, 3u, Generator> {};
-template <typename Generator> class GaloisField<4u, Generator> : public GaloisFieldImpl<uint8_t, 4u, Generator> {};
-template <typename Generator> class GaloisField<5u, Generator> : public GaloisFieldImpl<uint8_t, 5u, Generator> {};
-template <typename Generator> class GaloisField<6u, Generator> : public GaloisFieldImpl<uint8_t, 6u, Generator> {};
-template <typename Generator> class GaloisField<7u, Generator> : public GaloisFieldImpl<uint8_t, 7u, Generator> {};
-template <typename Generator> class GaloisField<8u, Generator> : public GaloisFieldImpl<uint8_t, 8u, Generator> {};
+template <std::size_t M, typename Primitive> class GaloisField;
+template <typename Primitive> class GaloisField<1u, Primitive> : public GaloisFieldImpl<uint8_t, 1u, Primitive> {};
+template <typename Primitive> class GaloisField<2u, Primitive> : public GaloisFieldImpl<uint8_t, 2u, Primitive> {};
+template <typename Primitive> class GaloisField<3u, Primitive> : public GaloisFieldImpl<uint8_t, 3u, Primitive> {};
+template <typename Primitive> class GaloisField<4u, Primitive> : public GaloisFieldImpl<uint8_t, 4u, Primitive> {};
+template <typename Primitive> class GaloisField<5u, Primitive> : public GaloisFieldImpl<uint8_t, 5u, Primitive> {};
+template <typename Primitive> class GaloisField<6u, Primitive> : public GaloisFieldImpl<uint8_t, 6u, Primitive> {};
+template <typename Primitive> class GaloisField<7u, Primitive> : public GaloisFieldImpl<uint8_t, 7u, Primitive> {};
+template <typename Primitive> class GaloisField<8u, Primitive> : public GaloisFieldImpl<uint8_t, 8u, Primitive> {};
 
 }
