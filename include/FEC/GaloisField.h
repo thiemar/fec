@@ -64,12 +64,10 @@ namespace Detail {
     };
 }
 
-
+/* Class for doing arithmetic operations in the specified Galois field. */
 template <typename T, std::size_t M, typename Generator>
 class GaloisFieldImpl {
     static_assert(M >= 1u && M <= 16u, "Galois field order must be between 2^1 and 2^16");
-
-    using gf_t = T;
 
     static constexpr std::size_t gen_poly = Detail::integer_from_index_sequence<std::size_t>(
         (typename Generator::ones_index_sequence_reversed){});
@@ -79,44 +77,46 @@ class GaloisFieldImpl {
     exponent-order.
     */
     template <std::size_t... I>
-    static constexpr std::array<gf_t, sizeof...(I)> get_field_elements(std::index_sequence<I...>) {
-        return std::array<gf_t, sizeof...(I)>{ Detail::get_field_element<gf_t, M, gen_poly>(I) ... };
+    static constexpr std::array<T, sizeof...(I)> get_field_elements(std::index_sequence<I...>) {
+        return std::array<T, sizeof...(I)>{ Detail::get_field_element<T, M, gen_poly>(I) ... };
     }
 
-    static constexpr std::array<gf_t, 1u << M> antilog_table = get_field_elements(std::make_index_sequence<1u << M>{});
+    static constexpr std::array<T, 1u << M> antilog_table = get_field_elements(std::make_index_sequence<1u << M>{});
 
     /*
     Get an array containing the exponents corresponding to each element of
     the Galois field.
     */
     template <std::size_t... I>
-    static constexpr std::array<gf_t, sizeof...(I)> get_field_elements_inverse(std::index_sequence<I...>) {
-        constexpr std::array<gf_t, sizeof...(I)> temp_antilog = get_field_elements(std::make_index_sequence<1u << M>{});
-        Detail::ConstantArray<gf_t, sizeof...(I)> temp = {0u};
+    static constexpr std::array<T, sizeof...(I)> get_field_elements_inverse(std::index_sequence<I...>) {
+        constexpr std::array<T, sizeof...(I)> temp_antilog = get_field_elements(std::make_index_sequence<1u << M>{});
+        Detail::ConstantArray<T, sizeof...(I)> temp = {0u};
 
         for (std::size_t i = 0u; i < sizeof...(I) - 1u; i++) {
             temp[temp_antilog[i]] = i;
         }
 
-        return std::array<gf_t, sizeof...(I)>{ temp[I]... };
+        return std::array<T, sizeof...(I)>{ temp[I]... };
     }
 
-    static constexpr std::array<gf_t, 1u << M> log_table = get_field_elements_inverse(std::make_index_sequence<1u << M>{});
+    static constexpr std::array<T, 1u << M> log_table = get_field_elements_inverse(std::make_index_sequence<1u << M>{});
 
 public:
-    static gf_t add(gf_t x, gf_t y) { return x^y; }
+    using gf_t = T;
 
-    static gf_t subtract(gf_t x, gf_t y) { return x^y; }
+    static T add(T x, T y) { return x^y; }
 
-    static gf_t log(gf_t x) { return log_table[x]; }
+    static T subtract(T x, T y) { return x^y; }
 
-    static gf_t antilog(gf_t x) { return antilog_table[x]; }
+    static T log(T x) { return log_table[x]; }
 
-    static gf_t multiply(gf_t x, gf_t y) {
+    static T antilog(T x) { return antilog_table[x]; }
+
+    static T multiply(T x, T y) {
         return (x && y) ? antilog((log(x) + log(y)) % ((1u << M) - 1u)) : 0u;
     }
 
-    static gf_t divide(gf_t x, gf_t y) {
+    static T divide(T x, T y) {
         return (x && y) ? antilog((((1u << M) - 1u) + log(x) - log(y)) % ((1u << M) - 1u)) : 0u;
     }
 };

@@ -39,10 +39,17 @@ namespace Polynomials {
     using m_8_301 = BinarySequence<1, 0, 0, 1, 0, 1, 1, 0, 1>;
 }
 
-// template <>
-// class ReedSolomonEncoder {
-//     static_assert(, "");
-// };
+template <std::size_t M, typename Generator, std::size_t Parity>
+class ReedSolomonEncoder {
+    static_assert(Parity > 1u && Parity < (1u << M) - 1u,
+        "Parity must be positive and smaller than the field size");
+
+    using galois_field = GaloisField<M, Generator>;
+    using gf_t = typename galois_field::gf_t;
+
+public:
+
+};
 
 }
 
