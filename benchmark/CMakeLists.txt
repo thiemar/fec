@@ -22,7 +22,30 @@ LOG_BUILD ON)
 ExternalProject_Get_Property(googlebenchmark source_dir)
 SET(googlebenchmark_dir ${source_dir})
 
-INCLUDE_DIRECTORIES(${googlebenchmark_dir}/include ${fecmagic_dir}/src ${ezpwd_rs_dir}/c++ ../include)
+# Add Mersinvald Reed-Solomon
+ExternalProject_Add(
+mersinvald_reed_solomon
+URL https://github.com/mersinvald/Reed-Solomon/archive/master.zip
+TIMEOUT 30
+# Disable install, configure and build steps
+INSTALL_COMMAND ""
+CONFIGURE_COMMAND ""
+BUILD_COMMAND ""
+# Wrap download, configure and build steps in a script to log output
+LOG_DOWNLOAD ON
+LOG_CONFIGURE ON
+LOG_BUILD ON)
+
+# Specify include dir
+ExternalProject_Get_Property(mersinvald_reed_solomon source_dir)
+SET(mersinvald_reed_solomon_dir ${source_dir})
+
+INCLUDE_DIRECTORIES(
+    ${googlebenchmark_dir}/include
+    ${fecmagic_dir}/src
+    ${ezpwd_rs_dir}/c++
+    ${mersinvald_reed_solomon_dir}/include
+    ../include)
 
 # Add benchmark executable target
 ADD_EXECUTABLE(benchmark
@@ -31,7 +54,7 @@ ADD_EXECUTABLE(benchmark
     BenchmarkMain.cpp)
 
 # Create dependency of benchmark on googlebenchmark
-ADD_DEPENDENCIES(benchmark googlebenchmark fecmagic ezpwd_rs)
+ADD_DEPENDENCIES(benchmark googlebenchmark fecmagic ezpwd_rs mersinvald_reed_solomon)
 
 # Specify benchmark's link libraries
 ExternalProject_Get_Property(googlebenchmark binary_dir)

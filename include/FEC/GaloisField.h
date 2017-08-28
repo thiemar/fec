@@ -104,19 +104,19 @@ class GaloisFieldImpl {
 public:
     using gf_t = T;
 
-    static T add(T x, T y) { return x^y; }
+    static constexpr T add(T x, T y) { return x^y; }
 
-    static T subtract(T x, T y) { return x^y; }
+    static constexpr T subtract(T x, T y) { return x^y; }
 
-    static T log(T x) { return log_table[x]; }
+    static constexpr T log(T x) { return log_table[x]; }
 
-    static T antilog(T x) { return antilog_table[x]; }
+    static constexpr T antilog(T x) { return antilog_table[x]; }
 
-    static T multiply(T x, T y) {
+    static constexpr T multiply(T x, T y) {
         return (x && y) ? antilog((log(x) + log(y)) % ((1u << M) - 1u)) : 0u;
     }
 
-    static T divide(T x, T y) {
+    static constexpr T divide(T x, T y) {
         return (x && y) ? antilog((((1u << M) - 1u) + log(x) - log(y)) % ((1u << M) - 1u)) : 0u;
     }
 };
