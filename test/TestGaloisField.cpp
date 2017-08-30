@@ -104,3 +104,27 @@ TEST(GaloisFieldTest, Division) {
     EXPECT_EQ(78u, TestGaloisField::divide(3u, 207u));
     EXPECT_EQ(143u, TestGaloisField::divide(142u, 244u));
 }
+
+TEST(GaloisFieldPolynomialTest, Addition) {
+    using TestGaloisField = Thiemar::GaloisField<8u, Thiemar::ReedSolomon::Polynomials::m_8_285>;
+    std::array<TestGaloisField::gf_t, 80u> p1;
+    std::array<TestGaloisField::gf_t, 8u> p2;
+
+    std::array<TestGaloisField::gf_t, 80u> p3 = TestGaloisField::add(p1, p2);
+}
+
+TEST(GaloisFieldPolynomialTest, Multiplication) {
+    using TestGaloisField = Thiemar::GaloisField<8u, Thiemar::ReedSolomon::Polynomials::m_8_285>;
+    std::array<TestGaloisField::gf_t, 80u> p1;
+    std::array<TestGaloisField::gf_t, 8u> p2;
+
+    std::array<TestGaloisField::gf_t, 87u> p3 = TestGaloisField::multiply(p1, p2);
+}
+
+TEST(GaloisFieldPolynomialTest, Remainder) {
+    using TestGaloisField = Thiemar::GaloisField<8u, Thiemar::ReedSolomon::Polynomials::m_8_285>;
+    std::array<TestGaloisField::gf_t, 80u> p1;
+    std::array<TestGaloisField::gf_t, 8u> p2;
+
+    std::array<TestGaloisField::gf_t, 7u> p3 = TestGaloisField::remainder(p1, p2);
+}

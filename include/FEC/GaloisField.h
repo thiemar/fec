@@ -56,11 +56,11 @@ namespace Detail {
     }
 
     /* Need an array class with constexpr access operators. */
-    template <typename T, int N>
+    template <typename T, std::size_t N>
     struct ConstantArray {
         T data[N];
-        constexpr T& operator[](int i) { return data[i]; }
-        constexpr const T& operator[](int i) const { return data[i]; }
+        constexpr T& operator[](std::size_t i) { return data[i]; }
+        constexpr const T& operator[](std::size_t i) const { return data[i]; }
     };
 }
 
@@ -118,6 +118,78 @@ public:
 
     static constexpr T divide(T x, T y) {
         return (x && y) ? antilog((((1u << M) - 1u) + log(x) - log(y)) % ((1u << M) - 1u)) : 0u;
+    }
+
+    template <std::size_t Len1, std::size_t Len2>
+    static std::array<gf_t, std::max(Len1, Len2)> add(
+            const std::array<gf_t, Len1>& x, const std::array<gf_t, Len2>& y) {
+        std::array<gf_t, std::max(Len1, Len2)> r = {};
+
+        for (std::size_t i = 0u; i < Len1; i++) {
+            r[i + r.size() - Len1] = x[i];
+        }
+
+        for (std::size_t i = 0u; i < Len2; i++) {
+            r[i + r.size() - Len2] ^= y[i];
+        }
+
+        return r;
+    }
+
+    template <std::size_t Len1, std::size_t Len2>
+    static std::array<gf_t, Len1 + Len2 - 1u> multiply(
+            const std::array<gf_t, Len1>& x, const std::array<gf_t, Len2>& y) {
+        std::array<gf_t, Len1 + Len2 - 1u> r = {};
+
+        for (std::size_t i = 0u; i < Len1; i++) {
+            for (std::size_t j = 0u; j < Len2; j++) {
+                r[i + j] ^= multiply(x[i], y[j]);
+            }
+        }
+
+        return r;
+    }
+
+    /*
+    Version of multiply which takes ConstantArray in order to be constexpr.
+    This is used for calculating the RS generator polynomial at compile time.
+    */
+    template <std::size_t Len1, std::size_t Len2>
+    static constexpr Detail::ConstantArray<gf_t, Len1 + Len2 - 1u> multiply(
+            const Detail::ConstantArray<gf_t, Len1>& x, const Detail::ConstantArray<gf_t, Len2>& y) {
+        Detail::ConstantArray<gf_t, Len1 + Len2 - 1u> r = {};
+
+        for (std::size_t i = 0u; i < Len1; i++) {
+            for (std::size_t j = 0u; j < Len2; j++) {
+                r[i + j] ^= multiply(x[i], y[j]);
+            }
+        }
+
+        return r;
+    }
+
+    template <std::size_t Len1, std::size_t Len2>
+    static std::array<gf_t, Len2 - 1u> remainder(
+            const std::array<gf_t, Len1>& x, const std::array<gf_t, Len2>& y) {
+        std::array<gf_t, Len1> d = x;
+
+        for (std::size_t i = 0u; i < Len1 - Len2 + 1u; i++) {
+            if (d[i] != 0u) {
+                for (std::size_t j = 1u; j < Len2; j++) {
+                    if (y[j] != 0u) {
+                        d[i + j] ^= multiply(y[j], d[i]);
+                    }
+                }
+            }
+        }
+
+        std::array<gf_t, Len2 - 1u> r;
+
+        for (std::size_t i = 0u; i < Len2 - 1u; i++) {
+            r[i] = d[Len1 - Len2 + 1u + i];
+        }
+
+        return r;
     }
 };
 
