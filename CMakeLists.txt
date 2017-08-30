@@ -52,6 +52,24 @@ LOG_BUILD ON)
 ExternalProject_Get_Property(ezpwd_rs source_dir)
 SET(ezpwd_rs_dir ${source_dir})
 
+# Add Mersinvald Reed-Solomon
+ExternalProject_Add(
+mersinvald_reed_solomon
+URL https://github.com/mersinvald/Reed-Solomon/archive/master.zip
+TIMEOUT 30
+# Disable install, configure and build steps
+INSTALL_COMMAND ""
+CONFIGURE_COMMAND ""
+BUILD_COMMAND ""
+# Wrap download, configure and build steps in a script to log output
+LOG_DOWNLOAD ON
+LOG_CONFIGURE ON
+LOG_BUILD ON)
+
+# Specify include dir
+ExternalProject_Get_Property(mersinvald_reed_solomon source_dir)
+SET(mersinvald_reed_solomon_dir ${source_dir})
+
 ENABLE_TESTING()
 
 ADD_SUBDIRECTORY(test EXCLUDE_FROM_ALL)

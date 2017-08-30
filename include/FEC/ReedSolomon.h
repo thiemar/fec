@@ -51,7 +51,6 @@ namespace Detail {
         static constexpr Thiemar::Detail::ConstantArray<typename GF::gf_t, 1u> poly = { 1u };
     };
 
-    /*  */
     template <typename T, std::size_t N, std::size_t... I>
     constexpr std::array<T, N> to_array_impl(const T (&a)[N], std::index_sequence<I...>) {
         return { {a[I]...} };
@@ -60,6 +59,16 @@ namespace Detail {
     template <typename T, std::size_t N>
     constexpr std::array<T, N> to_array(const T (&a)[N]) {
         return to_array_impl(a, std::make_index_sequence<N>{});
+    }
+
+    template <typename T, std::size_t N, std::size_t... I>
+    constexpr std::array<T, N> to_array_impl(T *a, std::index_sequence<I...>) {
+        return { {a[I]...} };
+    }
+     
+    template <typename T, std::size_t N>
+    constexpr std::array<T, N> to_array(T *a) {
+        return to_array_impl<T, N>(a, std::make_index_sequence<N>{});
     }
 }
 
@@ -70,52 +79,27 @@ namespace Polynomials {
 
 template <std::size_t M, typename Primitive, std::size_t Parity>
 class ReedSolomonEncoder {
-    static_assert(Parity > 1u && Parity < (1u << M) - 1u,
-        "Parity must be positive and smaller than the field size");
+    static_assert(Parity < (1u << M) - 1u, "Parity must be smaller than the field size");
 
     using gf = GaloisField<M, Primitive>;
     using gf_t = typename gf::gf_t;
 
 public:
-    static constexpr std::array<gf_t, Parity + 1u> generator = Detail::to_array<gf_t, Parity + 1u>(
+    static constexpr std::array<gf_t, Parity + 1u> generator = Detail::to_array(
         Detail::generator_polynomial<gf, Parity>::poly.data);
 
     /*
     Calculate parity for up to (2^M - Parity - 1) message bytes from 'input',
     placing the parity bytes at the end of the message bytes.
     */
-    static std::size_t encode(std::size_t len, const uint8_t *buf) {
+    template <std::size_t N>
+    static void encode(gf_t *buf) {
+        static_assert(N <= (1u << M) - 1u - Parity,
+            "Data length must be smaller than or equal to block size minus parity length");
+        std::array<gf_t, N+Parity> message = Detail::to_array<gf_t, N+Parity>(buf);
 
-
-        // polyGen = self._rsGenPoly(errSize)
-         
-        // # prepare the output buffer
-        // outBuffer = (len(argMesg) + errSize)
-        // outBuffer = [0] * outBuffer
-         
-        // # initialise the output buffer
-        // for mesgPos in range(0, len(argMesg)):
-        //     mesgChar = argMesg[mesgPos]
-        //     outBuffer[mesgPos] = ord(mesgChar)
-         
-        // # begin encoding
-        // for mesgPos in range(0, len(argMesg)):
-        //     mesgChar = outBuffer[mesgPos]
-        //     if (mesgChar != 0):
-        //         for polyPos in range(0, len(polyGen)):
-        //             tempValu = self.__gfMult(polyGen[polyPos], mesgChar)
-        //             outBuffer[mesgPos + polyPos] ^= tempValu
-         
-        // # finalise the output buffer
-        // for mesgPos in range(0, len(argMesg)):
-        //     mesgChar = argMesg[mesgPos]
-        //     outBuffer[mesgPos] = ord(mesgChar)
-         
-        // # return the output buffer
-        // return (outBuffer)
-
-
-
+        std::array<gf_t, Parity> parity = gf::remainder(message, generator);
+        memcpy(&buf[N], parity.data(), Parity);
     }
 };
 
