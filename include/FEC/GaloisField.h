@@ -200,30 +200,20 @@ public:
     This function is used to speed up encoding; the divisor is assumed to be
     the generator polynomial in index-form.
     */
-    template <std::size_t Len1, std::size_t Len2>
-    static std::array<gf_t, Len2 - 1u> remainder_logdivisor(
-            const std::array<gf_t, Len1>& x, const Detail::ConstantArray<gf_t, Len2>& y) {
+    template <std::size_t Len1, std::size_t... Gs>
+    static std::array<gf_t, sizeof...(Gs)> remainder_logdivisor(
+            const std::array<gf_t, Len1>& x, const Detail::ConstantArray<gf_t, sizeof...(Gs) + 1u>& y,
+            std::index_sequence<Gs...>) {
         std::array<gf_t, Len1> d = x;
 
-        for (std::size_t i = 0u; i < Len1 - Len2 + 1u; i++) {
-            if (x[i] != 0u) {
-                for (std::size_t j = 1u; j < Len2; j++) {
-                    /*
-                    Already have zero-checks here, so avoid repeating
-                    them in the GF multiplication function.
-                    */
-                    d[i + j] ^= antilog((y[j] + log(d[i])) % ((1u << M) - 1u));
-                }
+        for (std::size_t i = 0u; i < Len1 - sizeof...(Gs); i++) {
+            if (d[i] != 0u) {
+                int _[] = { (d[i + Gs + 1u] ^= antilog((y[Gs + 1u] + log(d[i])) % ((1u << M) - 1u)), 0)... };
+                (void)_;
             }
         }
 
-        std::array<gf_t, Len2 - 1u> r;
-
-        for (std::size_t i = 0u; i < Len2 - 1u; i++) {
-            r[i] = d[Len1 - Len2 + 1u + i];
-        }
-
-        return r;
+        return std::array<gf_t, sizeof...(Gs)>{ d[Len1 - sizeof...(Gs) + Gs]... };
     }
 };
 

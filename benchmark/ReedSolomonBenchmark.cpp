@@ -12,7 +12,8 @@
 #define MESSAGE_DATA_LENGTH 223u
 
 void ReedSolomonEncoder_Encode(benchmark::State& state) {
-    using TestEncoder = Thiemar::ReedSolomon::ReedSolomonEncoder<8u, Thiemar::ReedSolomon::Polynomials::m_8_285, 8u>;
+    using TestEncoder = Thiemar::ReedSolomon::ReedSolomonEncoder<
+        8u, Thiemar::ReedSolomon::Polynomials::m_8_285, MESSAGE_PARITY_LENGTH>;
     uint8_t buf[MESSAGE_DATA_LENGTH+MESSAGE_PARITY_LENGTH] = {};
 
     /* Seed RNG for repeatibility. */

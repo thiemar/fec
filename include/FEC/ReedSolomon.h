@@ -110,7 +110,8 @@ public:
             "Data length must be smaller than or equal to block size minus parity length");
         std::array<gf_t, N+Parity> message = Detail::to_array<gf_t, N+Parity>(buf);
 
-        std::array<gf_t, Parity> parity = gf::remainder_logdivisor(message, generator);
+        std::array<gf_t, Parity> parity = gf::remainder_logdivisor(message, generator,
+            std::make_index_sequence<Parity>{});
         memcpy(&buf[N], parity.data(), Parity);
     }
 };
