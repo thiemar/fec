@@ -46,9 +46,9 @@ namespace Detail {
         T e = 1u;
         for (std::size_t i = 0u; i < idx; i++) {
             if (e & (1u << (M - 1u))) {
-                e = (e << 1u) ^ G;
+                e = ((e << 1u) ^ G) % ((1u << M) - 1);
             } else {
-                e = e << 1u;
+                e = (e << 1u) % ((1u << M) - 1);
             }
         }
 
@@ -236,5 +236,13 @@ template <typename Primitive> class GaloisField<5u, Primitive> : public GaloisFi
 template <typename Primitive> class GaloisField<6u, Primitive> : public GaloisFieldImpl<uint8_t, 6u, Primitive> {};
 template <typename Primitive> class GaloisField<7u, Primitive> : public GaloisFieldImpl<uint8_t, 7u, Primitive> {};
 template <typename Primitive> class GaloisField<8u, Primitive> : public GaloisFieldImpl<uint8_t, 8u, Primitive> {};
+template <typename Primitive> class GaloisField<9u, Primitive> : public GaloisFieldImpl<uint16_t, 9u, Primitive> {};
+template <typename Primitive> class GaloisField<10u, Primitive> : public GaloisFieldImpl<uint16_t, 10u, Primitive> {};
+template <typename Primitive> class GaloisField<11u, Primitive> : public GaloisFieldImpl<uint16_t, 11u, Primitive> {};
+template <typename Primitive> class GaloisField<12u, Primitive> : public GaloisFieldImpl<uint16_t, 12u, Primitive> {};
+template <typename Primitive> class GaloisField<13u, Primitive> : public GaloisFieldImpl<uint16_t, 13u, Primitive> {};
+template <typename Primitive> class GaloisField<14u, Primitive> : public GaloisFieldImpl<uint16_t, 14u, Primitive> {};
+template <typename Primitive> class GaloisField<15u, Primitive> : public GaloisFieldImpl<uint16_t, 15u, Primitive> {};
+template <typename Primitive> class GaloisField<16u, Primitive> : public GaloisFieldImpl<uint16_t, 16u, Primitive> {};
 
 }
