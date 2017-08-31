@@ -90,7 +90,7 @@ class GaloisFieldImpl {
     template <std::size_t... I>
     static constexpr std::array<T, sizeof...(I)> get_field_elements_inverse(std::index_sequence<I...>) {
         constexpr std::array<T, sizeof...(I)> temp_antilog = get_field_elements(std::make_index_sequence<1u << M>{});
-        Detail::ConstantArray<T, sizeof...(I)> temp = {0u};
+        Detail::ConstantArray<T, sizeof...(I)> temp = {};
 
         for (std::size_t i = 0u; i < sizeof...(I) - 1u; i++) {
             temp[temp_antilog[i]] = i;
@@ -177,8 +177,42 @@ public:
             if (d[i] != 0u) {
                 for (std::size_t j = 1u; j < Len2; j++) {
                     if (y[j] != 0u) {
-                        d[i + j] ^= multiply(y[j], d[i]);
+                        /*
+                        Already have zero-checks here, so avoid repeating
+                        them in the GF multiplication function.
+                        */
+                        d[i + j] ^= antilog((log(y[j]) + log(d[i])) % ((1u << M) - 1u));
                     }
+                }
+            }
+        }
+
+        std::array<gf_t, Len2 - 1u> r;
+
+        for (std::size_t i = 0u; i < Len2 - 1u; i++) {
+            r[i] = d[Len1 - Len2 + 1u + i];
+        }
+
+        return r;
+    }
+
+    /*
+    This function is used to speed up encoding; the divisor is assumed to be
+    the generator polynomial in index-form.
+    */
+    template <std::size_t Len1, std::size_t Len2>
+    static std::array<gf_t, Len2 - 1u> remainder_logdivisor(
+            const std::array<gf_t, Len1>& x, const Detail::ConstantArray<gf_t, Len2>& y) {
+        std::array<gf_t, Len1> d = x;
+
+        for (std::size_t i = 0u; i < Len1 - Len2 + 1u; i++) {
+            if (x[i] != 0u) {
+                for (std::size_t j = 1u; j < Len2; j++) {
+                    /*
+                    Already have zero-checks here, so avoid repeating
+                    them in the GF multiplication function.
+                    */
+                    d[i + j] ^= antilog((y[j] + log(d[i])) % ((1u << M) - 1u));
                 }
             }
         }

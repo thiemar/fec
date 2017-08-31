@@ -51,6 +51,18 @@ namespace Detail {
         static constexpr Thiemar::Detail::ConstantArray<typename GF::gf_t, 1u> poly = { 1u };
     };
 
+    template <typename GF, std::size_t N>
+    constexpr Thiemar::Detail::ConstantArray<typename GF::gf_t, N> poly_to_index_form(
+            Thiemar::Detail::ConstantArray<typename GF::gf_t, N> in) {
+        Thiemar::Detail::ConstantArray<typename GF::gf_t, N> out = {};
+        
+        for (std::size_t i = 0; i < N; i++) {
+            out[i] = GF::log(in[i]);
+        }
+
+        return out;
+    }
+
     template <typename T, std::size_t N, std::size_t... I>
     constexpr std::array<T, N> to_array_impl(const T (&a)[N], std::index_sequence<I...>) {
         return { {a[I]...} };
@@ -85,8 +97,8 @@ class ReedSolomonEncoder {
     using gf_t = typename gf::gf_t;
 
 public:
-    static constexpr std::array<gf_t, Parity + 1u> generator = Detail::to_array(
-        Detail::generator_polynomial<gf, Parity>::poly.data);
+    static constexpr Thiemar::Detail::ConstantArray<gf_t, Parity + 1u> generator = Detail::poly_to_index_form<gf>(
+        Detail::generator_polynomial<gf, Parity>::poly);
 
     /*
     Calculate parity for up to (2^M - Parity - 1) message bytes from 'input',
@@ -98,13 +110,14 @@ public:
             "Data length must be smaller than or equal to block size minus parity length");
         std::array<gf_t, N+Parity> message = Detail::to_array<gf_t, N+Parity>(buf);
 
-        std::array<gf_t, Parity> parity = gf::remainder(message, generator);
+        std::array<gf_t, Parity> parity = gf::remainder_logdivisor(message, generator);
         memcpy(&buf[N], parity.data(), Parity);
     }
 };
 
 template <std::size_t M, typename Primitive, std::size_t Parity>
-constexpr std::array<typename GaloisField<M, Primitive>::gf_t, Parity + 1u> ReedSolomonEncoder<M, Primitive, Parity>::generator;
+constexpr Thiemar::Detail::ConstantArray<typename GaloisField<M, Primitive>::gf_t, Parity + 1u> ReedSolomonEncoder<
+    M, Primitive, Parity>::generator;
 
 }
 
