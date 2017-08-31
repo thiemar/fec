@@ -46,9 +46,9 @@ namespace Detail {
         T e = 1u;
         for (std::size_t i = 0u; i < idx; i++) {
             if (e & (1u << (M - 1u))) {
-                e = ((e << 1u) ^ G) % ((1u << M) - 1);
+                e = (e << 1u) ^ G;
             } else {
-                e = (e << 1u) % ((1u << M) - 1);
+                e = e << 1u;
             }
         }
 

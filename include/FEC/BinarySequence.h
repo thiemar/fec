@@ -43,9 +43,9 @@ namespace Detail {
     /* Concatenate two integer sequences. */
     template <typename Seq1, typename Seq2> struct concat_seq;
 
-    template <std::size_t... Is1, std::size_t... Is2>
-    struct concat_seq<std::index_sequence<Is1...>, std::index_sequence<Is2...>> {
-        using index_sequence = std::index_sequence<Is1..., Is2...>;
+    template <typename T, std::size_t... Is1, std::size_t... Is2>
+    struct concat_seq<std::integer_sequence<T, Is1...>, std::integer_sequence<T, Is2...>> {
+        using integer_sequence = std::integer_sequence<T, Is1..., Is2...>;
     };
 
     /*
@@ -60,7 +60,7 @@ namespace Detail {
     template <std::size_t Offset, bool... Bits>
     struct OneIndices<Offset, true, Bits...> {
         using index_sequence = typename concat_seq<std::index_sequence<Offset>,
-            typename OneIndices<Offset+1u, Bits...>::index_sequence>::index_sequence;
+            typename OneIndices<Offset+1u, Bits...>::index_sequence>::integer_sequence;
     };
 
     template <std::size_t Offset, bool... Bits>
@@ -80,7 +80,7 @@ namespace Detail {
     template <std::size_t Offset, bool... Bits>
     struct ZeroIndices<Offset, false, Bits...> {
         using index_sequence = typename concat_seq<std::index_sequence<Offset>,
-            typename ZeroIndices<Offset+1u, Bits...>::index_sequence>::index_sequence;
+            typename ZeroIndices<Offset+1u, Bits...>::index_sequence>::integer_sequence;
     };
 
     template <std::size_t Offset, bool... Bits>
@@ -91,22 +91,22 @@ namespace Detail {
     /* Test if a particular bit in a binary sequence is set. */
     template <std::size_t Index, bool... Bits>
     struct BitTest {
-        bool set = false;
+        static constexpr bool set = false;
     };
 
     template <std::size_t Index, bool B, bool... Bits>
     struct BitTest<Index, B, Bits...> {
-        bool set = BitTest<Index-1u, Bits...>{}.set;
+        static constexpr bool set = BitTest<Index-1u, Bits...>{}.set;
     };
 
     template <bool... Bits>
     struct BitTest<0u, true, Bits...> {
-        bool set = true;
+        static constexpr bool set = true;
     };
 
     template <bool... Bits>
     struct BitTest<0u, false, Bits...> {
-        bool set = false;
+        static constexpr bool set = false;
     };
 
     template <std::size_t I, std::size_t... Ones>
