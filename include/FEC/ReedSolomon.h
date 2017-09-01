@@ -27,7 +27,6 @@ SOFTWARE.
 #include <utility>
 
 #include "FEC/Types.h"
-#include "FEC/BinarySequence.h"
 #include "FEC/GaloisField.h"
 
 namespace Thiemar {
@@ -36,32 +35,48 @@ namespace ReedSolomon {
 
 namespace Detail {
     /*
+    Code to carry out compile-time multiplication of Galois field polynomials
+    represented using integer sequences.
+    */
+    template <typename GF, typename GF::gf_t... P1, typename GF::gf_t... P2>
+    static constexpr typename GF::gf_t poly_multiply_impl(std::size_t idx,
+            std::integer_sequence<typename GF::gf_t, P1...>, std::integer_sequence<typename GF::gf_t, P2...>) {
+        typename GF::gf_t temp = 0u;
+        for (std::size_t i = 0u; i <= idx; i++) {
+            if ((idx - i) < sizeof...(P1) && i < sizeof...(P2)) {
+                temp ^= GF::multiply(Thiemar::Detail::ConstantArray<typename GF::gf_t, sizeof...(P1)>{ P1... }[idx - i],
+                    Thiemar::Detail::ConstantArray<typename GF::gf_t, sizeof...(P2)>{ P2... }[i]);
+            }
+        }
+
+        return temp;
+    }
+
+    template <typename GF, typename Poly1, typename Poly2, typename Indices> struct poly_multiply;
+
+    template <typename GF, typename GF::gf_t... P1, typename GF::gf_t... P2, std::size_t... Is>
+    struct poly_multiply<GF, std::integer_sequence<typename GF::gf_t, P1...>, std::integer_sequence<typename GF::gf_t, P2...>,
+            std::index_sequence<Is...>> {
+        using integer_sequence = std::integer_sequence<typename GF::gf_t, poly_multiply_impl<GF>(Is,
+            std::integer_sequence<typename GF::gf_t, P1...>{}, std::integer_sequence<typename GF::gf_t, P2...>{})...>;
+    };
+
+    /*
     Calculate the Reed-Solomon generator polynomial as a function of the
     number of parity words.
     */
     template <typename GF, std::size_t Parity, std::size_t N = Parity>
     struct generator_polynomial {
-        static constexpr Thiemar::Detail::ConstantArray<typename GF::gf_t, N + 1u> poly = GF::multiply(
-            generator_polynomial<GF, Parity, N - 1u>::poly,
-            Thiemar::Detail::ConstantArray<typename GF::gf_t, 2u>{ 1u, GF::antilog(N) });
+        using coefficients = typename poly_multiply<GF,
+            typename generator_polynomial<GF, Parity, N - 1u>::coefficients,
+            std::integer_sequence<typename GF::gf_t, 1u, GF::antilog(N)>,
+            std::make_index_sequence<N + 1u>>::integer_sequence;
     };
 
     template <typename GF, std::size_t Parity>
     struct generator_polynomial<GF, Parity, 0u> {
-        static constexpr Thiemar::Detail::ConstantArray<typename GF::gf_t, 1u> poly = { 1u };
+        using coefficients = std::integer_sequence<typename GF::gf_t, 1u>;
     };
-
-    template <typename GF, std::size_t N>
-    constexpr Thiemar::Detail::ConstantArray<typename GF::gf_t, N> poly_to_index_form(
-            Thiemar::Detail::ConstantArray<typename GF::gf_t, N> in) {
-        Thiemar::Detail::ConstantArray<typename GF::gf_t, N> out = {};
-        
-        for (std::size_t i = 0; i < N; i++) {
-            out[i] = GF::log(in[i]);
-        }
-
-        return out;
-    }
 
     template <typename T, std::size_t N, std::size_t... I>
     constexpr std::array<T, N> to_array_impl(const T (&a)[N], std::index_sequence<I...>) {
@@ -97,8 +112,7 @@ class ReedSolomonEncoder {
     using gf_t = typename gf::gf_t;
 
 public:
-    static constexpr Thiemar::Detail::ConstantArray<gf_t, Parity + 1u> generator = Detail::poly_to_index_form<gf>(
-        Detail::generator_polynomial<gf, Parity>::poly);
+    using generator = typename Detail::generator_polynomial<gf, Parity>::coefficients;
 
     /*
     Calculate parity for up to (2^M - Parity - 1) message bytes from 'input',
@@ -110,15 +124,11 @@ public:
             "Data length must be smaller than or equal to block size minus parity length");
         std::array<gf_t, N+Parity> message = Detail::to_array<gf_t, N+Parity>(buf);
 
-        std::array<gf_t, Parity> parity = gf::remainder_logdivisor(message, generator,
+        std::array<gf_t, Parity> parity = gf::remainder(message, generator{},
             std::make_index_sequence<Parity>{});
         memcpy(&buf[N], parity.data(), Parity);
     }
 };
-
-template <std::size_t M, typename Primitive, std::size_t Parity>
-constexpr Thiemar::Detail::ConstantArray<typename GaloisField<M, Primitive>::gf_t, Parity + 1u> ReedSolomonEncoder<
-    M, Primitive, Parity>::generator;
 
 }
 
