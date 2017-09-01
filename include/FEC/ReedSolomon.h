@@ -38,14 +38,14 @@ namespace Detail {
     Code to carry out compile-time multiplication of Galois field polynomials
     represented using integer sequences.
     */
-    template <typename GF, typename GF::gf_t... P1, typename GF::gf_t... P2>
+    template <typename GF, std::size_t Len1, std::size_t Len2>
     static constexpr typename GF::gf_t poly_multiply_impl(std::size_t idx,
-            std::integer_sequence<typename GF::gf_t, P1...>, std::integer_sequence<typename GF::gf_t, P2...>) {
+            Thiemar::Detail::ConstantArray<typename GF::gf_t, Len1> poly1,
+            Thiemar::Detail::ConstantArray<typename GF::gf_t, Len2> poly2) {
         typename GF::gf_t temp = 0u;
         for (std::size_t i = 0u; i <= idx; i++) {
-            if ((idx - i) < sizeof...(P1) && i < sizeof...(P2)) {
-                temp ^= GF::multiply(Thiemar::Detail::ConstantArray<typename GF::gf_t, sizeof...(P1)>{ P1... }[idx - i],
-                    Thiemar::Detail::ConstantArray<typename GF::gf_t, sizeof...(P2)>{ P2... }[i]);
+            if ((idx - i) < Len1 && i < Len2) {
+                temp ^= GF::multiply(poly1[idx - i], poly2[i]);
             }
         }
 
@@ -58,7 +58,8 @@ namespace Detail {
     struct poly_multiply<GF, std::integer_sequence<typename GF::gf_t, P1...>, std::integer_sequence<typename GF::gf_t, P2...>,
             std::index_sequence<Is...>> {
         using integer_sequence = std::integer_sequence<typename GF::gf_t, poly_multiply_impl<GF>(Is,
-            std::integer_sequence<typename GF::gf_t, P1...>{}, std::integer_sequence<typename GF::gf_t, P2...>{})...>;
+            Thiemar::Detail::ConstantArray<typename GF::gf_t, sizeof...(P1)>{ P1... },
+            Thiemar::Detail::ConstantArray<typename GF::gf_t, sizeof...(P2)>{ P2... })...>;
     };
 
     /*
