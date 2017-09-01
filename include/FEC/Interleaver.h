@@ -150,7 +150,6 @@ namespace Detail {
         Add ShiftIndex to the InputIndices which correspond to DiffIndices
         greater than or equal to ShiftIndex.
         */
-        using new_input_sequence = std::index_sequence<DiffIndices >= 1u ? InputIndices + 1u : InputIndices...>;
         constexpr bool_vec_t mask_shift = mask_from_index_sequence(
             std::index_sequence<DiffIndices >= 1u ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
         constexpr bool_vec_t mask_static = mask_from_index_sequence(
@@ -245,11 +244,11 @@ class Interleaver {
 
     template <std::size_t PolyIndex>
     using input_index_sequence = typename Detail::UnwrappedInputIndexSequence<PuncturingMatrix, NumPoly, PolyIndex,
-        std::make_index_sequence<num_poly_bits<PolyIndex>()>>::type;
+        std::make_index_sequence<Interleaver::num_poly_bits<PolyIndex>()>>::type;
 
     template <std::size_t PolyIndex>
     using output_index_sequence = typename Detail::UnwrappedOutputIndexSequence<PuncturingMatrix, NumPoly, PolyIndex,
-        std::make_index_sequence<num_poly_bits<PolyIndex>()>>::type;
+        std::make_index_sequence<Interleaver::num_poly_bits<PolyIndex>()>>::type;
 
     /* Interleaves a block of bool_vec_t. */
     template <std::size_t... I, std::size_t... O>

@@ -22,7 +22,7 @@ SOFTWARE.
 
 #pragma once
 
-#include <cstddef>
+#include <cstring>
 #include <type_traits>
 #include <utility>
 
