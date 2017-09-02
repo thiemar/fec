@@ -16,7 +16,7 @@ TEST(ConvolutionalEncoderTest, Encode) {
     fecmagic::ConvolutionalEncoder<7, uint8_t, 0b1100111, 0b1011101> fecmagic_enc;
 
     /* Set up test buffers. */
-    uint8_t test_in[1024u] = {0};
+    uint8_t test_in[1024u] = {};
     uint8_t test_out[TestEncoder::calculate_output_length(sizeof(test_in))] = {0xaa};
     uint8_t test_out_fecmagic[TestEncoder::calculate_output_length(sizeof(test_in))] = {0x55};
 
@@ -50,7 +50,7 @@ TEST(PuncturedConvolutionalEncoderTest, Encode) {
         7, uint8_t, 0b1100111, 0b1011101> fecmagic_enc;
 
     /* Set up test buffers. */
-    uint8_t test_in[1024u] = {0};
+    uint8_t test_in[1024u] = {};
     uint8_t test_out[TestEncoderPunctured::calculate_output_length(sizeof(test_in))] = {0xaa};
     uint8_t test_out_fecmagic[TestEncoderPunctured::calculate_output_length(sizeof(test_in))] = {0x55};
 

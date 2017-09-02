@@ -135,7 +135,7 @@ class PuncturedConvolutionalEncoder {
     these bytes should be zero.
     */
     static void encode_block(const uint8_t *in, uint8_t *out) {
-        bool_vec_t conv_vec[interleaver::in_buf_len()] = {0};
+        bool_vec_t conv_vec[interleaver::in_buf_len()] = {};
 
         constexpr std::size_t n_conv = block_size() / sizeof(bool_vec_t) + ((block_size() % sizeof(bool_vec_t)) ? 1u : 0u);
 
@@ -184,8 +184,8 @@ public:
         constexpr std::size_t flush_bytes = ConstraintLength / 8u + ((ConstraintLength % 8u) ? 1u : 0u);
         std::size_t out_idx = 0u;
         for (std::size_t i = 0u; i < len + flush_bytes; i += block_size()) {
-            uint8_t in_block[block_size() + flush_bytes] = {0};
-            uint8_t out_block[interleaver::out_buf_len()] = {0};
+            uint8_t in_block[block_size() + flush_bytes] = {};
+            uint8_t out_block[interleaver::out_buf_len()] = {};
 
             std::memcpy(&in_block[flush_bytes - std::min(i, flush_bytes)],
                 &input[i - std::min(i, flush_bytes)],

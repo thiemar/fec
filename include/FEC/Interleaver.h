@@ -277,9 +277,9 @@ class Interleaver {
         int _1[] = { (in_vec[PolyIndices] = in[coarse_offset + PolyIndices] << fine_offset, 0)... };
         (void)_1;
 
-        if (coarse_offset < in_buf_len() - NumPoly) {
+        if (coarse_offset < in_buf_len() - NumPoly && fine_offset) {
             int _2[] = { (in_vec[PolyIndices] |=
-                in[coarse_offset + PolyIndices + 1u] >> (sizeof(bool_vec_t) * 8u - fine_offset), 0)... };
+                in[coarse_offset + PolyIndices + NumPoly] >> (sizeof(bool_vec_t) * 8u - fine_offset), 0)... };
             (void)_2;
         }
 
