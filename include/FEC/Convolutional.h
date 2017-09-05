@@ -48,6 +48,14 @@ From https://web.stanford.edu/group/cioffi/doc/book/chap10.pdf
 namespace Polynomials {
     using n_2_k_7_g11 = BinarySequence<1, 1, 1, 0, 0, 1, 1>;
     using n_2_k_7_g12 = BinarySequence<1, 0, 1, 1, 1, 0, 1>;
+    using n_2_k_8_g11 = BinarySequence<1, 1, 0, 1, 0, 0, 1, 1>;
+    using n_2_k_8_g12 = BinarySequence<1, 0, 1, 1, 1, 1, 0, 1>;
+    using n_2_k_9_g11 = BinarySequence<1, 1, 0, 1, 0, 1, 1, 1, 1>;
+    using n_2_k_9_g12 = BinarySequence<1, 0, 0, 0, 1, 1, 1, 0, 1>;
+    using n_2_k_10_g11 = BinarySequence<1, 0, 1, 1, 0, 1, 1, 1, 1, 1>;
+    using n_2_k_10_g12 = BinarySequence<1, 1, 0, 0, 1, 1, 1, 1, 0, 1>;
+    using n_2_k_11_g11 = BinarySequence<1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1>;
+    using n_2_k_11_g12 = BinarySequence<1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1>;
 }
 
 /* Standard puncturing matrix convenience definitions. */
@@ -107,13 +115,13 @@ class PuncturedConvolutionalEncoder {
         constexpr std::size_t fine_offset = ConstraintIndex % 8u;
 
         /* Pack data into working vector. */
-        bool_vec_t cur_vec = ((bool_vec_t)in[coarse_offset - 1] << ((sizeof(bool_vec_t)-1u) * 8u)) << (8u - fine_offset);
-        int _1[] = { (cur_vec |= ((bool_vec_t)in[ByteIndices + coarse_offset] <<
+        bool_vec_t cur_vec = ((bool_vec_t)in[-coarse_offset - 1] << ((sizeof(bool_vec_t)-1u) * 8u)) << (8u - fine_offset);
+        int _1[] = { (cur_vec |= ((bool_vec_t)in[ByteIndices + -coarse_offset] <<
             ((sizeof(bool_vec_t)-1u - ByteIndices) * 8u)) >> fine_offset, 0)... };
         (void)_1;
 
         /* Calculate applicable polynomial taps. */
-        int _2[] = { (calculate_taps<ConstraintLength-1u - fine_offset, Polynomials, PolyIndices>(cur_vec, out), 0)... };
+        int _2[] = { (calculate_taps<ConstraintLength-1u - ConstraintIndex, Polynomials, PolyIndices>(cur_vec, out), 0)... };
         (void)_2;
     }
 
