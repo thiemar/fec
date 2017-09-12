@@ -207,9 +207,6 @@ public:
     }
 };
 
-template <std::size_t ConstraintLength, typename... Polynomials>
-using ConvolutionalEncoder = PuncturedConvolutionalEncoder<ConstraintLength, BinarySequence<true>, Polynomials...>;
-
 }
 
 }
