@@ -32,6 +32,7 @@ INCLUDE_DIRECTORIES(
 # Add benchmark executable target
 ADD_EXECUTABLE(benchmark
     ConvolutionalEncoderBenchmark.cpp
+    ConvolutionalDecoderBenchmark.cpp
     ReedSolomonBenchmark.cpp
     BenchmarkMain.cpp)
 

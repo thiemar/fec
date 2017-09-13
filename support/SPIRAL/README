@@ -1,0 +1,22 @@
+To compile the Spiral-generated decoder, simply put the generated code
+and header files in the same directory than the infrastructure files and
+type "make". 
+
+You can then run the executable by typing "./viterbi". It should
+return you the error rates of the spiral decoder and of the generic
+C decoder plus the decoding speed.
+
+Note that the speed of the generated decoder files is highly dependent
+on the compiler because Spiral produces C code with intrinsics and not
+assembly code. Therefore, we recommend using the highest possible
+optimization level and switching to the Intel compiler if possible (In
+this case, try to use the flags "-fast -fno-alias"). Note that, in
+some cases, optimizations may actually make the code incorrect which
+is easily detectable because the error rate of the code becomes
+unrealistic.
+
+
+-------------------
+Frederic de Mesmay
+June 4th 2008
+Carnegie Mellon University

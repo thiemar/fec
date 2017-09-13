@@ -33,6 +33,7 @@ INCLUDE_DIRECTORIES(
 ADD_EXECUTABLE(unittest
     TestInterleaver.cpp
     TestConvolutionalEncoder.cpp
+    TestConvolutionalDecoder.cpp
     TestGaloisField.cpp
     TestReedSolomonEncoder.cpp)
 

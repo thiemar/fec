@@ -207,6 +207,22 @@ public:
     }
 };
 
+template <std::size_t ConstraintLength, std::size_t TracebackLength, typename PuncturingMatrix, typename... Polynomials>
+class PuncturedConvolutionalDecoder {
+    static_assert(ConstraintLength > 1u, "Constraint length must be at least two");
+    static_assert(sizeof...(Polynomials) > 1u, "Minimum of two polynomials are required");
+    static_assert(Detail::all_true<(Polynomials::size() == ConstraintLength)...>::value,
+        "Length of polynomials must be equal to constraint length");
+    static_assert(PuncturingMatrix::size() % sizeof...(Polynomials) == 0u,
+        "Puncturing matrix size must be an integer multiple of the code rate");
+    static_assert(PuncturingMatrix::size() > 0u, "Puncturing matrix size must be larger than zero");
+    static_assert(PuncturingMatrix::size() <= ConstraintLength*sizeof...(Polynomials),
+        "Puncturing matrix size must be no greater than the constraint length multiplied by the code rate");
+    static_assert(sizeof(bool_vec_t) * 8u / PuncturingMatrix::ones() > 0u,
+        "Word size must be large enough to fit at least one puncturing matrix cycle");
+
+};
+
 }
 
 }
