@@ -151,11 +151,11 @@ namespace Detail {
         greater than or equal to ShiftIndex.
         */
         constexpr bool_vec_t mask_shift = mask_from_index_sequence(
-            std::index_sequence<DiffIndices >= 1u ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
+            std::index_sequence<DiffIndices & ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
         constexpr bool_vec_t mask_static = mask_from_index_sequence(
-            std::index_sequence<DiffIndices < 1u ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
+            std::index_sequence<DiffIndices < ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
 
-        return (in & mask_static) | (in & mask_shift) >> 1u;
+        return (in & mask_static) | (in & mask_shift) >> ShiftIndex;
     }
 
     /*
@@ -176,17 +176,19 @@ namespace Detail {
         Add ShiftIndex to the InputIndices which correspond to DiffIndices
         greater than or equal to ShiftIndex.
         */
-        using new_input_sequence = std::index_sequence<DiffIndices >= ShiftIndex ? InputIndices + ShiftIndex : InputIndices...>;
-        constexpr bool_vec_t mask_shift = mask_from_index_sequence(
-            std::index_sequence<DiffIndices >= ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
-        constexpr bool_vec_t mask_static = mask_from_index_sequence(
-            std::index_sequence<DiffIndices < ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
+        using new_input_sequence = std::index_sequence<DiffIndices & ShiftIndex ? InputIndices + ShiftIndex : InputIndices...>;
 
         /*
         Subtract ShiftIndex from DiffIndices which are greater than or equal
         to ShiftIndex.
         */
-        using new_diff_sequence = std::index_sequence<DiffIndices >= ShiftIndex ? DiffIndices - ShiftIndex : DiffIndices...>;
+        using new_diff_sequence = std::index_sequence<DiffIndices & ShiftIndex ? DiffIndices - ShiftIndex : DiffIndices...>;
+
+        /* Generate masks. */
+        constexpr bool_vec_t mask_shift = mask_from_index_sequence(
+            std::index_sequence<DiffIndices & ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
+        constexpr bool_vec_t mask_static = mask_from_index_sequence(
+            std::index_sequence<DiffIndices < ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
 
         /*
         Create the mask from InputIndices and apply it after the shift
@@ -195,11 +197,83 @@ namespace Detail {
         return spread_word<ShiftIndex / 2u>((in & mask_static) | (in & mask_shift) >> ShiftIndex,
             new_input_sequence{}, new_diff_sequence{});
     }
+
+    /*
+    Use magic numbers to despread input word as efficiently as possible based
+    on the puncturing matrix.
+    */
+
+    /* Need these forward declarations. */
+    template <std::size_t ShiftIndex, std::size_t... OutputIndices, std::size_t... DiffIndices>
+    typename std::enable_if_t<index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
+    (ShiftIndex < sizeof(bool_vec_t) * 8u / 2u), bool_vec_t> despread_word(
+            bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>);
+
+    template <std::size_t ShiftIndex, std::size_t... OutputIndices, std::size_t... DiffIndices>
+    typename std::enable_if_t<!index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
+    (ShiftIndex < sizeof(bool_vec_t) * 8u / 2u), bool_vec_t> despread_word(
+            bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>);
+
+    /* This is the final shift/mask operation. */
+    template <std::size_t ShiftIndex, std::size_t... OutputIndices, std::size_t... DiffIndices>
+    typename std::enable_if_t<ShiftIndex == sizeof(bool_vec_t) * 8u / 2u, bool_vec_t> despread_word(
+            bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>) {
+        /*
+        Add ShiftIndex to the OutputIndices which correspond to DiffIndices
+        greater than or equal to ShiftIndex.
+        */
+        constexpr bool_vec_t mask_shift = mask_from_index_sequence(
+            std::index_sequence<DiffIndices & ShiftIndex ? OutputIndices : sizeof(bool_vec_t)*8u ...>{});
+        constexpr bool_vec_t mask_static = mask_from_index_sequence(
+            std::index_sequence<!(DiffIndices & ShiftIndex) ? OutputIndices : sizeof(bool_vec_t)*8u ...>{});
+
+        return (in & mask_static) | (in & mask_shift) << ShiftIndex;
+    }
+
+    /*
+    Skip if none of the DiffIndices are greater than or equal to ShiftIndex.
+    */
+    template <std::size_t ShiftIndex, std::size_t... OutputIndices, std::size_t... DiffIndices>
+    typename std::enable_if_t<index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
+    (ShiftIndex < sizeof(bool_vec_t) * 8u / 2u), bool_vec_t> despread_word(
+            bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>) {
+        return despread_word<ShiftIndex * 2u>(in, std::index_sequence<OutputIndices...>{}, std::index_sequence<DiffIndices...>{});
+    }
+
+    template <std::size_t ShiftIndex, std::size_t... OutputIndices, std::size_t... DiffIndices>
+    typename std::enable_if_t<!index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
+    (ShiftIndex < sizeof(bool_vec_t) * 8u / 2u), bool_vec_t> despread_word(
+            bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>) {
+        /*
+        Add ShiftIndex to the OutputIndices which correspond to DiffIndices
+        greater than or equal to ShiftIndex.
+        */
+        using new_output_sequence = std::index_sequence<DiffIndices & ShiftIndex ? OutputIndices - ShiftIndex : OutputIndices...>;
+
+        /*
+        Subtract ShiftIndex from DiffIndices which are greater than or equal
+        to ShiftIndex.
+        */
+        using new_diff_sequence = std::index_sequence<DiffIndices & ShiftIndex ? DiffIndices - ShiftIndex : DiffIndices...>;
+
+        /* Generate masks. */
+        constexpr bool_vec_t mask_shift = mask_from_index_sequence(
+            std::index_sequence<DiffIndices & ShiftIndex ? OutputIndices : sizeof(bool_vec_t)*8u ...>{});
+        constexpr bool_vec_t mask_static = mask_from_index_sequence(
+            std::index_sequence<!(DiffIndices & ShiftIndex) ? OutputIndices : sizeof(bool_vec_t)*8u ...>{});
+
+        /*
+        Create the mask from OutputIndices and apply it after the shift
+        operation.
+        */
+        return despread_word<ShiftIndex * 2u>((in & mask_static) | (in & mask_shift) << ShiftIndex,
+            new_output_sequence{}, new_diff_sequence{});
+    }
 }
 
 namespace Convolutional {
 
-/* Class to do arbitrary bitwise interleaving. */
+/* Class to do arbitrary bitwise interleaving and deinterleaving. */
 template <typename PuncturingMatrix, std::size_t NumPoly, std::size_t BlockSize>
 class Interleaver {
     static_assert(BlockSize > 0u, "Block size must be at least 1 byte");
@@ -271,8 +345,8 @@ class Interleaver {
     template <std::size_t I, std::size_t... PolyIndices>
     static bool_vec_t pack_and_spread_vec(const bool_vec_t *in, std::index_sequence<PolyIndices...>) {
         bool_vec_t in_vec[NumPoly];
-        std::size_t coarse_offset = ((I * num_in_bits()) / (sizeof(bool_vec_t) * 8u)) * NumPoly;
-        std::size_t fine_offset = (I * num_in_bits()) % (sizeof(bool_vec_t) * 8u);
+        constexpr std::size_t coarse_offset = ((I * num_in_bits()) / (sizeof(bool_vec_t) * 8u)) * NumPoly;
+        constexpr std::size_t fine_offset = (I * num_in_bits()) % (sizeof(bool_vec_t) * 8u);
 
         int _1[] = { (in_vec[PolyIndices] = in[coarse_offset + PolyIndices] << fine_offset, 0)... };
         (void)_1;
@@ -294,15 +368,15 @@ class Interleaver {
     /* Pack 8 bits from 'in' into a single output byte. */
     template <std::size_t I>
     static void pack_out_vec(const bool_vec_t *in, uint8_t *out) {
-        std::size_t coarse_offset = (I * 8u) / num_out_bits();
-        std::size_t fine_offset = (I * 8u) % num_out_bits();
+        constexpr std::size_t coarse_offset = (I * 8u) / num_out_bits();
+        constexpr std::size_t fine_offset = (I * 8u) % num_out_bits();
 
         constexpr bool_vec_t mask = Detail::mask_bits(num_out_bits());
 
         out[I] = (in[coarse_offset] & mask) >> ((sizeof(bool_vec_t)-1u) * 8u - fine_offset);
 
-        if (num_out_bits() - fine_offset < 8u && coarse_offset < out_buf_len() - 1u) {
-            out[I] |= (in[coarse_offset+1u] >> (fine_offset + num_out_bits() - fine_offset));
+        if (num_out_bits() - fine_offset < 8u) {
+            out[I] |= in[coarse_offset+1u] >> ((sizeof(bool_vec_t)-1u) * 8u + num_out_bits() - fine_offset);
         }
     }
 
@@ -324,6 +398,61 @@ class Interleaver {
         (void)_;
 
         return out;
+    }
+
+    /* Deinterleaves a block of bytes. */
+    template <std::size_t... I, std::size_t... O>
+    static void deinterleave_block(const uint8_t *in, bool_vec_t *out, std::index_sequence<I...>, std::index_sequence<O...>) {
+        bool_vec_t in_vec[sizeof...(O)] = {};
+
+        /* Pack data from input buffer into bool_vec_t. */
+        int _2[] = { (unpack_in_vec<I>(in, in_vec), 0)... };
+        (void)_2;
+
+        /* Deinterleave and pack bits into output vector. */
+        int _1[] = { (despread_and_pack_vector<O>(in_vec, out, std::make_index_sequence<NumPoly>{}), 0)... };
+        (void)_1;
+    }
+
+    /* Unpack a byte from 'in' into a bool_vec_t at the appropriate index. */
+    template <std::size_t I>
+    static void unpack_in_vec(const uint8_t *in, bool_vec_t *out) {
+        constexpr std::size_t coarse_offset = (I * 8u) / num_out_bits();
+        constexpr std::size_t fine_offset = (I * 8u) % num_out_bits();
+
+        constexpr bool_vec_t mask = Detail::mask_bits(num_out_bits());
+
+        out[coarse_offset] |= ((bool_vec_t)in[I] << ((sizeof(bool_vec_t)-1u) * 8u - fine_offset)) & mask;
+
+        if (num_out_bits() - fine_offset < 8u) {
+            out[coarse_offset+1u] |= (bool_vec_t)in[I] << ((sizeof(bool_vec_t)-1u) * 8u + num_out_bits() - fine_offset);
+        }
+    }
+
+    /*
+    Deinterleave bits from the input vector, and then pack them into the
+    array of output vectors.
+    */
+    template <std::size_t O, std::size_t... PolyIndices>
+    static void despread_and_pack_vector(const bool_vec_t *in, bool_vec_t *out, std::index_sequence<PolyIndices...>) {
+        bool_vec_t in_vec[NumPoly];
+        int _[] = { (in_vec[PolyIndices] = Detail::despread_word<1u>(
+            in[O] << PolyIndices, output_index_sequence<PolyIndices>{},
+            (typename Detail::DiffIndexSequence<output_index_sequence<PolyIndices>,
+            input_index_sequence<PolyIndices>>::type){}), 0)... };
+        (void)_;
+
+        constexpr std::size_t coarse_offset = ((O * num_in_bits()) / (sizeof(bool_vec_t) * 8u)) * NumPoly;
+        constexpr std::size_t fine_offset = (O * num_in_bits()) % (sizeof(bool_vec_t) * 8u);
+
+        int _1[] = { (out[coarse_offset + PolyIndices] |= in_vec[PolyIndices] >> fine_offset, 0)... };
+        (void)_1;
+
+        if (coarse_offset < in_buf_len() - NumPoly && fine_offset) {
+            int _2[] = { (out[coarse_offset + PolyIndices + NumPoly] |=
+                in_vec[PolyIndices] << (sizeof(bool_vec_t) * 8u - fine_offset), 0)... };
+            (void)_2;
+        }
     }
 
 public:
@@ -352,6 +481,17 @@ public:
         interleave_block(in, out,
             std::make_index_sequence<num_iterations()>{},
             std::make_index_sequence<out_buf_len()>{});
+    }
+
+    /*
+    Deinterleaves a block of bytes. The input buffer must have a length equal
+    to at least in_buf_len, and the output buffer must have a length equal to
+    at least out_buf_len.
+    */
+    static void deinterleave(const uint8_t *in, bool_vec_t *out) {
+        deinterleave_block(in, out,
+            std::make_index_sequence<out_buf_len()>{},
+            std::make_index_sequence<num_iterations()>{});
     }
 };
 

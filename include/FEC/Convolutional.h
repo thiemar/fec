@@ -207,8 +207,9 @@ public:
     }
 };
 
+/* Decoder implementing the Viterbi algorithm using hard-decisions. */
 template <std::size_t ConstraintLength, std::size_t TracebackLength, typename PuncturingMatrix, typename... Polynomials>
-class PuncturedConvolutionalDecoder {
+class PuncturedHardDecisionViterbiDecoder {
     static_assert(ConstraintLength > 1u, "Constraint length must be at least two");
     static_assert(sizeof...(Polynomials) > 1u, "Minimum of two polynomials are required");
     static_assert(Detail::all_true<(Polynomials::size() == ConstraintLength)...>::value,
