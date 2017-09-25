@@ -12,7 +12,6 @@ static std::array<T, sizeof...(Is)> poly_compare_helper(std::integer_sequence<T,
 
 TEST(ReedSolomonEncoderTest, Generator) {
     using TestEncoder = Thiemar::ReedSolomon::ReedSolomonEncoder<8u, Thiemar::ReedSolomon::Polynomials::m_8_285, 8u>;
-    using TestGaloisField = Thiemar::GaloisField<8u, Thiemar::ReedSolomon::Polynomials::m_8_285>;
 
     uint8_t generator[] = { 1u, 227u, 44u, 178u, 71u, 172u, 8u, 224u, 37u };
 
