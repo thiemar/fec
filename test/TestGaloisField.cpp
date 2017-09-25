@@ -111,6 +111,7 @@ TEST(GaloisFieldPolynomialTest, Addition) {
     std::array<TestGaloisField::gf_t, 8u> p2;
 
     std::array<TestGaloisField::gf_t, 80u> p3 = TestGaloisField::add(p1, p2);
+    (void)p3;
 }
 
 TEST(GaloisFieldPolynomialTest, Multiplication) {
@@ -119,6 +120,7 @@ TEST(GaloisFieldPolynomialTest, Multiplication) {
     std::array<TestGaloisField::gf_t, 8u> p2;
 
     std::array<TestGaloisField::gf_t, 87u> p3 = TestGaloisField::multiply(p1, p2);
+    (void)p3;
 }
 
 TEST(GaloisFieldPolynomialTest, Remainder) {
@@ -127,4 +129,5 @@ TEST(GaloisFieldPolynomialTest, Remainder) {
     std::array<TestGaloisField::gf_t, 8u> p2;
 
     std::array<TestGaloisField::gf_t, 7u> p3 = TestGaloisField::remainder(p1, p2);
+    (void)p3;
 }
