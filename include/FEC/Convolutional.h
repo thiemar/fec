@@ -22,6 +22,7 @@ SOFTWARE.
 
 #pragma once
 
+#include <algorithm>
 #include <cstring>
 #include <type_traits>
 #include <utility>
@@ -37,6 +38,34 @@ namespace Detail {
     template <bool...> struct bool_pack;
     template <bool... v>
     using all_true = std::is_same<bool_pack<true, v...>, bool_pack<v..., true>>;
+
+    /* Calculate Hamming weight of a word. */
+    template <typename T>
+    constexpr T calculate_hamming_weight(T in) {
+        T weight = 0u;
+
+        for (std::size_t i = 0u; i < sizeof(T) * 8u; i++) {
+            weight += in & ((T)1u << i) ? 1u : 0u;
+        }
+
+        return weight;
+    }
+
+    /* Create a Hamming distance look-up table for the given type. */
+    template <typename T, std::size_t NumPoly, T PunctureMask, T Reference>
+    class HammingDistance {
+        template <std::size_t... I>
+        static constexpr std::array<T, sizeof...(I)> get_hamming_table_elements(std::index_sequence<I...>) {
+            return std::array<T, sizeof...(I)>{ calculate_hamming_weight((I ^ Reference) & PunctureMask) ... };
+        }
+
+    public:
+        static constexpr std::array<T, (std::size_t)1u << NumPoly> table =
+            get_hamming_table_elements(std::make_index_sequence<(std::size_t)1u << NumPoly>{});
+    };
+
+    template <typename T, std::size_t NumPoly, T PunctureMask, T Reference>
+    constexpr std::array<T, (std::size_t)1u << NumPoly> HammingDistance<T, NumPoly, PunctureMask, Reference>::table;
 }
 
 namespace Convolutional {
@@ -137,7 +166,7 @@ class PuncturedConvolutionalEncoder {
     /*
     Efficiently encode a block of bytes. The 'in' buffer should point to a
     buffer of size equal to the block size plus the minimum number of bytes
-    occupied by the constant length. The 'in' pointer should point to the
+    occupied by the constraint length. The 'in' pointer should point to the
     first byte of the block, so the leading constraint bytes are below the
     'in' pointer in memory. If 'in' points to the start of the input data,
     these bytes should be zero.
@@ -184,7 +213,7 @@ public:
     Do efficient convolutional encoding by carrying out a number of
     convolutions in parallel equal to the word size.
     */
-    static std::size_t encode(const uint8_t *input, std::size_t len, uint8_t *out) {
+    static std::size_t encode(const uint8_t *in, std::size_t len, uint8_t *out) {
         /*
         Use temporary arrays to allow input and output lengths of sizes which
         aren't integer multiples of the block size.
@@ -196,7 +225,7 @@ public:
             uint8_t out_block[interleaver::out_buf_len()] = {};
 
             std::memcpy(&in_block[flush_bytes - std::min(i, flush_bytes)],
-                &input[i - std::min(i, flush_bytes)],
+                &in[i - std::min(i, flush_bytes)],
                 std::min(block_size(), len - i) + std::min(i, flush_bytes));
             encode_block(&in_block[flush_bytes], out_block);
             std::memcpy(&out[out_idx], out_block, interleaver::out_buf_len());
@@ -212,6 +241,7 @@ template <std::size_t ConstraintLength, std::size_t TracebackLength, typename Pu
 class PuncturedHardDecisionViterbiDecoder {
     static_assert(ConstraintLength > 1u, "Constraint length must be at least two");
     static_assert(sizeof...(Polynomials) > 1u, "Minimum of two polynomials are required");
+    static_assert(sizeof...(Polynomials) <= 8u, "Maximum supported code rate is 1/8");
     static_assert(Detail::all_true<(Polynomials::size() == ConstraintLength)...>::value,
         "Length of polynomials must be equal to constraint length");
     static_assert(PuncturingMatrix::size() % sizeof...(Polynomials) == 0u,
@@ -221,7 +251,202 @@ class PuncturedHardDecisionViterbiDecoder {
         "Puncturing matrix size must be no greater than the constraint length multiplied by the code rate");
     static_assert(sizeof(bool_vec_t) * 8u / PuncturingMatrix::ones() > 0u,
         "Word size must be large enough to fit at least one puncturing matrix cycle");
+    static_assert(TracebackLength % (PuncturingMatrix::size() / sizeof...(Polynomials)) == 0u,
+        "Traceback length must be an integer multiple of puncturing matrix row length");
 
+    /* TODO: Choose more size-optimal definitions for these. */
+    using metric_t = bool_vec_t;
+    using state_vec_t = bool_vec_t;
+    using bit_vec_t = uint8_t;
+
+    static constexpr std::size_t num_states() { return (state_vec_t)1u << (ConstraintLength - 1u); }
+
+    /* Number of bool_vec_t required for a decision vector. */
+    static constexpr std::size_t decision_size() {
+        return std::max((num_states() / 8u) / sizeof(bool_vec_t) +
+            ((num_states() / 8u) % sizeof(bool_vec_t) ? 1u : 0u), (std::size_t)1u);
+    }
+
+    /*
+    Number of output bytes generated per call of decode_block. This number is
+    calculated to consume an integer number of input bytes.
+    */
+    static constexpr std::size_t block_size() {
+        std::size_t puncturing_row_len = PuncturingMatrix::size() / sizeof...(Polynomials);
+        return sizeof(bool_vec_t) > puncturing_row_len ? (sizeof(bool_vec_t) / puncturing_row_len) * puncturing_row_len :
+            puncturing_row_len;
+    }
+
+    using interleaver = Interleaver<PuncturingMatrix, sizeof...(Polynomials), block_size()>;
+
+    /* Decode a number of bits equal to the traceback length. */
+    static void decode_traceback(const uint8_t *in, uint8_t *out) {
+        bool_vec_t decisions[TracebackLength * decision_size()] = {};
+
+        /*
+        Initialise path metric corresponding to state 0 to 0, and all other
+        paths to a sufficiently large value.
+        */
+        metric_t path_metrics_1[num_states()];
+        metric_t path_metrics_2[num_states()];
+        metric_t *final_metrics;
+
+        path_metrics_1[0] = 0u;
+        std::fill_n(&path_metrics_1[1], num_states() - 1u, (metric_t)1u << (sizeof(metric_t) * 8u - 1u));
+
+        /* Do as many full block operations as required. */
+        std::size_t i = 0u, idx = 0u;
+        for (; i < TracebackLength / (block_size() * 8u); i++) {
+            decode_block(&in[idx], path_metrics_1, path_metrics_2, &decisions[i * block_size() * 8u * decision_size()],
+                std::make_index_sequence<block_size() * 8u>{});
+            idx += interleaver::out_buf_len();
+        }
+
+        final_metrics = path_metrics_1;
+
+        /* Do a final partial block operation if needed. */
+        if (TracebackLength % (block_size() * 8u)) {
+            decode_block(&in[idx], path_metrics_1, path_metrics_2, &decisions[i * block_size() * 8u * decision_size()],
+                std::make_index_sequence<TracebackLength % (block_size() * 8u)>{});
+
+            if (TracebackLength % 2u) {
+                final_metrics = path_metrics_2;
+            }
+        }
+
+        /* Find best path metric at the end. */
+        state_vec_t min_path = std::min_element(final_metrics, final_metrics + num_states()) - final_metrics;
+        std::size_t coarse_offset = min_path / (sizeof(bool_vec_t) * 8u);
+        std::size_t fine_offset = min_path % (sizeof(bool_vec_t) * 8u);
+
+        /* Run traceback. */
+        for (std::size_t i = 0u; i < TracebackLength; i++) {
+            out[i / 8u] |= (decisions[(TracebackLength - i - 1u) * decision_size() + coarse_offset] &
+                ((bool_vec_t)1u << fine_offset)) ? (uint8_t)1u << (i % 8u) : 0u;
+        }
+    }
+
+    /* Decode a block of bytes. */
+    template <std::size_t... BitIndices>
+    static void decode_block(const uint8_t *in,
+            metric_t *path_metrics_1, metric_t *path_metrics_2,
+            bool_vec_t *decisions, std::index_sequence<BitIndices...>) {
+        bool_vec_t in_vec[interleaver::in_buf_len()] = {};
+
+        /* Deinterleave the block into boolean vectors. */
+        interleaver::deinterleave(in, in_vec);
+
+        /*
+        Each iteration, we need the current and next path metrics. The
+        calculate_trellis_step function takes the current path metrics and
+        returns the new path metrics.
+        */
+        int _[] = { (calculate_trellis_step<BitIndices % (PuncturingMatrix::size() / sizeof...(Polynomials))>(
+            get_in_bits<BitIndices>(in_vec, std::make_index_sequence<sizeof...(Polynomials)>{}),
+            BitIndices % 2u ? path_metrics_2 : path_metrics_1,
+            BitIndices % 2u ? path_metrics_1 : path_metrics_2,
+            &decisions[BitIndices * decision_size()], std::make_integer_sequence<state_vec_t, num_states()>{}), 0)... };
+        (void)_;
+    }
+
+    template <std::size_t BitIndex, std::size_t... PolyIndices>
+    static bit_vec_t get_in_bits(const bool_vec_t *in_vec, std::index_sequence<PolyIndices...>) {
+        bit_vec_t out = {};
+
+        constexpr std::size_t coarse_offset = BitIndex / (sizeof(bool_vec_t) * 8u);
+        constexpr std::size_t fine_offset = BitIndex % (sizeof(bool_vec_t) * 8u);
+
+        int _[] = { (out |= (in_vec[coarse_offset * sizeof...(Polynomials) + PolyIndices] &
+            ((bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u)-1u - fine_offset)) ? 1u : 0u) << PolyIndices, 0)... };
+        (void)_;
+
+        return out;
+    }
+
+    template <std::size_t PunctureIndex, state_vec_t... StateIndices>
+    static void calculate_trellis_step(bit_vec_t in_bits,
+            const metric_t *cur_path_metrics, metric_t *next_path_metrics,
+            bool_vec_t *decisions, std::index_sequence<StateIndices...>) {
+        /* Carry out add-compare-select for each possible state. */
+        int _[] = { (next_path_metrics[StateIndices] = add_compare_select<
+            calculate_puncture_mask<PunctureIndex>(std::make_index_sequence<sizeof...(Polynomials)>{}), StateIndices>(
+            in_bits, cur_path_metrics, decisions), 0)... };
+        (void)_;
+    }
+
+    template <std::size_t I, std::size_t... PolyIndices>
+    static constexpr bit_vec_t calculate_puncture_mask(std::index_sequence<PolyIndices...>) {
+        bit_vec_t out = {};
+
+        for (std::size_t i : { PolyIndices... }) {
+            out |= PuncturingMatrix::test(I * sizeof...(Polynomials) + i) << i;
+        }
+
+        return out;
+    }
+
+    /* Carry out an add-compare-select operation for a single bit. */
+    template <bit_vec_t PunctureMask, state_vec_t State>
+    static metric_t add_compare_select(bit_vec_t in_bits, const metric_t *prev_path_metrics, bool_vec_t *decisions) {
+        /* Work out ancestor state indices. */
+        constexpr state_vec_t ancestor_1 = (State << 1u) & (num_states() - 1u);
+        constexpr state_vec_t ancestor_2 = ancestor_1 | 1u;
+
+        /* Calculate expected bits for each branch. */
+        constexpr bit_vec_t expected_bits_1 = calculate_expected_bits(ancestor_1,
+            std::make_index_sequence<sizeof...(Polynomials)>{});
+        constexpr bit_vec_t expected_bits_2 = calculate_expected_bits(ancestor_2,
+            std::make_index_sequence<sizeof...(Polynomials)>{});
+
+        /* Calculate updated path metrics for ancestor branches. */
+        metric_t path_1 = prev_path_metrics[ancestor_1] +
+            (metric_t)Detail::HammingDistance<bit_vec_t, sizeof...(Polynomials), PunctureMask, expected_bits_1>::table[in_bits];
+        metric_t path_2 = prev_path_metrics[ancestor_2] +
+            (metric_t)Detail::HammingDistance<bit_vec_t, sizeof...(Polynomials), PunctureMask, expected_bits_2>::table[in_bits];
+
+        /*
+        Get the state MSB, which indicates whether this state is on the
+        0-path or 1-path of the ancestor states.
+        */
+        constexpr bool msb = State & (num_states() >> 1u);
+
+        /* Choose and store smallest path metric and store decision. */
+        if (path_1 < path_2) {
+            constexpr std::size_t coarse_offset = ancestor_1 / (sizeof(bool_vec_t) * 8u);
+            constexpr std::size_t fine_offset = ancestor_1 % (sizeof(bool_vec_t) * 8u);
+            decisions[coarse_offset] |= msb ? (bool_vec_t)1u << fine_offset : 0u;
+            return path_1;
+        } else {
+            constexpr std::size_t coarse_offset = ancestor_2 / (sizeof(bool_vec_t) * 8u);
+            constexpr std::size_t fine_offset = ancestor_2 % (sizeof(bool_vec_t) * 8u);
+            decisions[coarse_offset] |= msb ? (bool_vec_t)1u << fine_offset : 0u;
+            return path_2;
+        }
+    }
+
+    /* Calculate the expected set of encoder outputs for a given state. */
+    template <std::size_t... PolyIndices>
+    static constexpr bit_vec_t calculate_expected_bits(state_vec_t state, std::index_sequence<PolyIndices...>) {
+        bit_vec_t out = {};
+        constexpr state_vec_t poly_vec[sizeof...(Polynomials)] = { Polynomials::to_integer()... };
+
+        for (std::size_t i : { PolyIndices... }) {
+            out |= (Detail::calculate_hamming_weight(state & poly_vec[i]) % 2u) << i;
+        }
+
+        return out;
+    }
+
+public:
+    /*
+    Decode a block of convolutionally encoded data using the Viterbi
+    algorithm with hard-decisions.
+    */
+    static std::size_t decode(const uint8_t *in, std::size_t len, uint8_t *out) {
+        decode_traceback(in, out);
+
+        return len;
+    }
 };
 
 }

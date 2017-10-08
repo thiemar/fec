@@ -145,12 +145,38 @@ public:
     template <std::size_t I>
     static constexpr bool test() { return Detail::BitTest<I, Bits...>{}.set; }
 
+    static constexpr bool test(std::size_t idx) {
+        std::size_t i = 0u;
+        for (bool b : { Bits... }) {
+            if (i++ == idx) {
+                return b;
+            }
+        }
+
+        return false;
+    }
+
     /* Sum the sequence up to the given index. */
     template <std::size_t I>
     static constexpr std::size_t sum() {
         static_assert(I < sizeof...(Bits), "Index is greater than number of bits");
 
         return Detail::sum_helper<I>(ones_index_sequence{});
+    }
+
+    /*
+    Return an integer representation of the sequence, with the first bit in
+    the sequence corresponding to the LSB and the last to the MSB.
+    */
+    static constexpr std::size_t to_integer() {
+        std::size_t out = 0u;
+        std::size_t i = 0u;
+
+        for (bool b : { Bits... }) {
+            out += (std::size_t)b << i++;
+        }
+
+        return out;
     }
 };
 

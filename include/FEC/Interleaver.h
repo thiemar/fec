@@ -465,8 +465,8 @@ public:
     }
 
     /*
-    Size (in bytes) of the output buffer required to supply a full interleave
-    block operation.
+    Size (in bytes) of the output buffer filled by a full interleave block
+    operation.
     */
     static constexpr std::size_t out_buf_len() {
         return BlockSize * PuncturingMatrix::ones() / (PuncturingMatrix::size() / NumPoly);
@@ -485,8 +485,8 @@ public:
 
     /*
     Deinterleaves a block of bytes. The input buffer must have a length equal
-    to at least in_buf_len, and the output buffer must have a length equal to
-    at least out_buf_len.
+    to at least out_buf_len, and the output buffer must have a length equal
+    to at least in_buf_len.
     */
     static void deinterleave(const uint8_t *in, bool_vec_t *out) {
         deinterleave_block(in, out,
