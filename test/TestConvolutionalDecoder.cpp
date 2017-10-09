@@ -15,7 +15,7 @@ using TestEncoder_k_7 = Thiemar::Convolutional::PuncturedConvolutionalEncoder<
 
 using TestDecoder_k_7 = Thiemar::Convolutional::PuncturedHardDecisionViterbiDecoder<
     7u,
-    4u*8,
+    1024u*8,
     Thiemar::Convolutional::PuncturingMatrices::n_2_rate_1_2,
     Thiemar::BinarySequence<1, 1, 0, 1, 1, 0, 1>,
     Thiemar::BinarySequence<1, 0, 0, 1, 1, 1, 1>
@@ -51,14 +51,14 @@ TEST(ConvolutionalDecoderTest_k_7, ReferenceDecode) {
 
 TEST(ConvolutionalDecoderTest_k_7, Decode) {
     /* Set up test buffers. */
-    uint8_t test_in[4u] = {};
+    uint8_t test_in[1024u] = {};
     uint8_t test_out[TestEncoder_k_7::calculate_output_length(sizeof(test_in))] = {0xaa};
-    uint8_t test_decoded[4u] = {};
+    uint8_t test_decoded[1024u] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
     for (std::size_t i = 0u; i < sizeof(test_in); i++) {
-        test_in[i] = 0x00u; //std::rand() & 0xffu;
+        test_in[i] = std::rand() & 0xffu;
     }
 
     TestEncoder_k_7::encode(test_in, sizeof(test_in), test_out);

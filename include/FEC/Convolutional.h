@@ -249,10 +249,10 @@ class PuncturedHardDecisionViterbiDecoder {
     static_assert(PuncturingMatrix::size() > 0u, "Puncturing matrix size must be larger than zero");
     static_assert(PuncturingMatrix::size() <= ConstraintLength*sizeof...(Polynomials),
         "Puncturing matrix size must be no greater than the constraint length multiplied by the code rate");
-    static_assert(sizeof(bool_vec_t) * 8u / PuncturingMatrix::ones() > 0u,
-        "Word size must be large enough to fit at least one puncturing matrix cycle");
     static_assert(TracebackLength % (PuncturingMatrix::size() / sizeof...(Polynomials)) == 0u,
         "Traceback length must be an integer multiple of puncturing matrix row length");
+    static_assert(sizeof(bool_vec_t) * 8u / PuncturingMatrix::ones() > 0u,
+        "Word size must be large enough to fit at least one puncturing matrix cycle");
 
     /* TODO: Choose more size-optimal definitions for these. */
     using metric_t = bool_vec_t;
@@ -316,13 +316,22 @@ class PuncturedHardDecisionViterbiDecoder {
 
         /* Find best path metric at the end. */
         state_vec_t min_path = std::min_element(final_metrics, final_metrics + num_states()) - final_metrics;
-        std::size_t coarse_offset = min_path / (sizeof(bool_vec_t) * 8u);
-        std::size_t fine_offset = min_path % (sizeof(bool_vec_t) * 8u);
 
         /* Run traceback. */
+        state_vec_t state = min_path;
         for (std::size_t i = 0u; i < TracebackLength; i++) {
-            out[i / 8u] |= (decisions[(TracebackLength - i - 1u) * decision_size() + coarse_offset] &
-                ((bool_vec_t)1u << fine_offset)) ? (uint8_t)1u << (i % 8u) : 0u;
+            std::size_t coarse_offset = state / (sizeof(bool_vec_t) * 8u);
+            std::size_t fine_offset = state % (sizeof(bool_vec_t) * 8u);
+
+            out[(TracebackLength - i - 1u) / 8u] |= (state & (num_states() / 2u)) ? (uint8_t)1u << (i % 8u) : 0u;
+
+            state <<= 1u;
+
+            if (decisions[(TracebackLength - i - 1u) * decision_size() + coarse_offset] & ((bool_vec_t)1u << fine_offset)) {
+                state |= 1u;
+            }
+
+            state &= (num_states() - 1u);
         }
     }
 
@@ -389,7 +398,7 @@ class PuncturedHardDecisionViterbiDecoder {
     template <bit_vec_t PunctureMask, state_vec_t State>
     static metric_t add_compare_select(bit_vec_t in_bits, const metric_t *prev_path_metrics, bool_vec_t *decisions) {
         /* Work out ancestor state indices. */
-        constexpr state_vec_t ancestor_1 = (State << 1u) & (num_states() - 1u);
+        constexpr state_vec_t ancestor_1 = State << 1u;
         constexpr state_vec_t ancestor_2 = ancestor_1 | 1u;
 
         /* Calculate expected bits for each branch. */
@@ -398,28 +407,22 @@ class PuncturedHardDecisionViterbiDecoder {
         constexpr bit_vec_t expected_bits_2 = calculate_expected_bits(ancestor_2,
             std::make_index_sequence<sizeof...(Polynomials)>{});
 
-        /* Calculate updated path metrics for ancestor branches. */
-        metric_t path_1 = prev_path_metrics[ancestor_1] +
-            (metric_t)Detail::HammingDistance<bit_vec_t, sizeof...(Polynomials), PunctureMask, expected_bits_1>::table[in_bits];
-        metric_t path_2 = prev_path_metrics[ancestor_2] +
-            (metric_t)Detail::HammingDistance<bit_vec_t, sizeof...(Polynomials), PunctureMask, expected_bits_2>::table[in_bits];
+        constexpr state_vec_t idx_1 = ancestor_1 & (num_states() - 1u);
+        constexpr state_vec_t idx_2 = ancestor_2 & (num_states() - 1u);
 
-        /*
-        Get the state MSB, which indicates whether this state is on the
-        0-path or 1-path of the ancestor states.
-        */
-        constexpr bool msb = State & (num_states() >> 1u);
+        /* Calculate updated path metrics for ancestor branches. */
+        metric_t path_1 = prev_path_metrics[idx_1] +
+            (metric_t)Detail::HammingDistance<bit_vec_t, sizeof...(Polynomials), PunctureMask, expected_bits_1>::table[in_bits];
+        metric_t path_2 = prev_path_metrics[idx_2] +
+            (metric_t)Detail::HammingDistance<bit_vec_t, sizeof...(Polynomials), PunctureMask, expected_bits_2>::table[in_bits];
 
         /* Choose and store smallest path metric and store decision. */
         if (path_1 < path_2) {
-            constexpr std::size_t coarse_offset = ancestor_1 / (sizeof(bool_vec_t) * 8u);
-            constexpr std::size_t fine_offset = ancestor_1 % (sizeof(bool_vec_t) * 8u);
-            decisions[coarse_offset] |= msb ? (bool_vec_t)1u << fine_offset : 0u;
             return path_1;
         } else {
-            constexpr std::size_t coarse_offset = ancestor_2 / (sizeof(bool_vec_t) * 8u);
-            constexpr std::size_t fine_offset = ancestor_2 % (sizeof(bool_vec_t) * 8u);
-            decisions[coarse_offset] |= msb ? (bool_vec_t)1u << fine_offset : 0u;
+            constexpr std::size_t coarse_offset = State / (sizeof(bool_vec_t) * 8u);
+            constexpr std::size_t fine_offset = State % (sizeof(bool_vec_t) * 8u);
+            decisions[coarse_offset] |= (bool_vec_t)1u << fine_offset;
             return path_2;
         }
     }
@@ -427,7 +430,7 @@ class PuncturedHardDecisionViterbiDecoder {
     /* Calculate the expected set of encoder outputs for a given state. */
     template <std::size_t... PolyIndices>
     static constexpr bit_vec_t calculate_expected_bits(state_vec_t state, std::index_sequence<PolyIndices...>) {
-        bit_vec_t out = {};
+        bit_vec_t out = 0u;
         constexpr state_vec_t poly_vec[sizeof...(Polynomials)] = { Polynomials::to_integer()... };
 
         for (std::size_t i : { PolyIndices... }) {
