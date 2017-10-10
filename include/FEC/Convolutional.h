@@ -251,6 +251,7 @@ class PuncturedHardDecisionViterbiDecoder {
         "Puncturing matrix size must be no greater than the constraint length multiplied by the code rate");
     static_assert(TracebackLength % (PuncturingMatrix::size() / sizeof...(Polynomials)) == 0u,
         "Traceback length must be an integer multiple of puncturing matrix row length");
+    static_assert(TracebackLength % 8u == 0u, "Traceback length must be a multiple of eight");
     static_assert(sizeof(bool_vec_t) * 8u / PuncturingMatrix::ones() > 0u,
         "Word size must be large enough to fit at least one puncturing matrix cycle");
 
@@ -360,7 +361,7 @@ class PuncturedHardDecisionViterbiDecoder {
 
     template <std::size_t BitIndex, std::size_t... PolyIndices>
     static bit_vec_t get_in_bits(const bool_vec_t *in_vec, std::index_sequence<PolyIndices...>) {
-        bit_vec_t out = {};
+        bit_vec_t out = 0u;
 
         constexpr std::size_t coarse_offset = BitIndex / (sizeof(bool_vec_t) * 8u);
         constexpr std::size_t fine_offset = BitIndex % (sizeof(bool_vec_t) * 8u);
@@ -375,7 +376,7 @@ class PuncturedHardDecisionViterbiDecoder {
     template <std::size_t PunctureIndex, state_vec_t... StateIndices>
     static void calculate_trellis_step(bit_vec_t in_bits,
             const metric_t *cur_path_metrics, metric_t *next_path_metrics,
-            bool_vec_t *decisions, std::index_sequence<StateIndices...>) {
+            bool_vec_t *decisions, std::integer_sequence<state_vec_t, StateIndices...>) {
         /* Carry out add-compare-select for each possible state. */
         int _[] = { (next_path_metrics[StateIndices] = add_compare_select<
             calculate_puncture_mask<PunctureIndex>(std::make_index_sequence<sizeof...(Polynomials)>{}), StateIndices>(
