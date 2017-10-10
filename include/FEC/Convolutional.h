@@ -418,14 +418,15 @@ class PuncturedHardDecisionViterbiDecoder {
             (metric_t)Detail::HammingDistance<bit_vec_t, sizeof...(Polynomials), PunctureMask, expected_bits_2>::table[in_bits];
 
         /* Choose and store smallest path metric and store decision. */
-        if (path_1 < path_2) {
-            return path_1;
-        } else {
-            constexpr std::size_t coarse_offset = State / (sizeof(bool_vec_t) * 8u);
-            constexpr std::size_t fine_offset = State % (sizeof(bool_vec_t) * 8u);
+        constexpr std::size_t coarse_offset = State / (sizeof(bool_vec_t) * 8u);
+        constexpr std::size_t fine_offset = State % (sizeof(bool_vec_t) * 8u);
+
+        if (path_2 < path_1) {
             decisions[coarse_offset] |= (bool_vec_t)1u << fine_offset;
             return path_2;
         }
+
+        return path_1;
     }
 
     /* Calculate the expected set of encoder outputs for a given state. */
