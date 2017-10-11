@@ -29,7 +29,7 @@ void FECMagicConvolutionalDecoder_Decode(benchmark::State& state) {
     /* Set up test buffers. */
     uint8_t test_in[1024u] = {};
     uint8_t test_out[TestEncoder::calculate_output_length(sizeof(test_in))] = {};
-    uint8_t test_decoded_fecmagic[1024u] = {};
+    uint8_t test_decoded_fecmagic[TestDecoder::calculate_output_length(sizeof(test_out))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -52,7 +52,7 @@ void ConvolutionalDecoder_Decode(benchmark::State& state) {
     /* Set up test buffers. */
     uint8_t test_in[1024u] = {};
     uint8_t test_out[TestEncoder::calculate_output_length(sizeof(test_in))] = {};
-    uint8_t test_decoded[1024u] = {};
+    uint8_t test_decoded[TestDecoder::calculate_output_length(sizeof(test_out))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -92,7 +92,7 @@ void FECMagicPuncturedConvolutionalDecoder_Decode(benchmark::State& state) {
     /* Set up test buffers. */
     uint8_t test_in[1024u] = {};
     uint8_t test_out[TestEncoderPunctured::calculate_output_length(sizeof(test_in))] = {};
-    uint8_t test_decoded_fecmagic[1024u] = {};
+    uint8_t test_decoded_fecmagic[TestDecoderPunctured::calculate_output_length(sizeof(test_out))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -115,7 +115,7 @@ void PuncturedConvolutionalDecoder_Decode(benchmark::State& state) {
     /* Set up test buffers. */
     uint8_t test_in[1024u] = {};
     uint8_t test_out[TestEncoderPunctured::calculate_output_length(sizeof(test_in))] = {};
-    uint8_t test_decoded[1024u] = {};
+    uint8_t test_decoded[TestDecoderPunctured::calculate_output_length(sizeof(test_out))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
