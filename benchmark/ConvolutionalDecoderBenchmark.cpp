@@ -76,6 +76,14 @@ using TestEncoderPunctured = Thiemar::Convolutional::PuncturedConvolutionalEncod
     Thiemar::BinarySequence<1, 0, 0, 1, 1, 1, 1>
 >;
 
+using TestDecoderPunctured = Thiemar::Convolutional::PuncturedHardDecisionViterbiDecoder<
+    7u,
+    56u,
+    Thiemar::BinarySequence<1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0>,
+    Thiemar::BinarySequence<1, 1, 0, 1, 1, 0, 1>,
+    Thiemar::BinarySequence<1, 0, 0, 1, 1, 1, 1>
+>;
+
 void FECMagicPuncturedConvolutionalDecoder_Decode(benchmark::State& state) {
     fecmagic::PuncturedConvolutionalDecoder<
         fecmagic::Sequence<uint8_t, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0>, 35, 7,
@@ -102,3 +110,24 @@ void FECMagicPuncturedConvolutionalDecoder_Decode(benchmark::State& state) {
 }
 
 BENCHMARK(FECMagicPuncturedConvolutionalDecoder_Decode);
+
+void PuncturedConvolutionalDecoder_Decode(benchmark::State& state) {
+    /* Set up test buffers. */
+    uint8_t test_in[1024u] = {};
+    uint8_t test_out[TestEncoderPunctured::calculate_output_length(sizeof(test_in))] = {};
+    uint8_t test_decoded[1024u] = {};
+
+    /* Seed RNG for repeatibility. */
+    std::srand(123u);
+    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+        test_in[i] = std::rand() & 0xffu;
+    }
+
+    TestEncoderPunctured::encode(test_in, sizeof(test_in), test_out);
+
+    while(state.KeepRunning()) {
+        TestDecoderPunctured::decode(test_out, sizeof(test_out), test_decoded);
+    }
+}
+
+BENCHMARK(PuncturedConvolutionalDecoder_Decode);
