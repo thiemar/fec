@@ -15,7 +15,7 @@ using TestEncoder_k_7 = Thiemar::Convolutional::PuncturedConvolutionalEncoder<
 
 using TestDecoder_k_7 = Thiemar::Convolutional::PuncturedHardDecisionViterbiDecoder<
     7u,
-    1024u*8,
+    32u,
     Thiemar::Convolutional::PuncturingMatrices::n_2_rate_1_2,
     Thiemar::BinarySequence<1, 1, 0, 1, 1, 0, 1>,
     Thiemar::BinarySequence<1, 0, 0, 1, 1, 1, 1>
