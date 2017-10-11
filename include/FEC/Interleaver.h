@@ -373,7 +373,11 @@ class Interleaver {
 
         constexpr bool_vec_t mask = Detail::mask_bits(num_out_bits());
 
-        out[I] = (in[coarse_offset] & mask) >> ((sizeof(bool_vec_t)-1u) * 8u - fine_offset);
+        if (fine_offset <= (sizeof(bool_vec_t)-1u) * 8u) {
+            out[I] = (in[coarse_offset] & mask) >> ((sizeof(bool_vec_t)-1u) * 8u - fine_offset);
+        } else {
+            out[I] = (in[coarse_offset] & mask) << (fine_offset - (sizeof(bool_vec_t)-1u) * 8u);
+        }
 
         if (num_out_bits() - fine_offset < 8u) {
             out[I] |= in[coarse_offset+1u] >> ((sizeof(bool_vec_t)-1u) * 8u + num_out_bits() - fine_offset);
@@ -422,7 +426,11 @@ class Interleaver {
 
         constexpr bool_vec_t mask = Detail::mask_bits(num_out_bits());
 
-        out[coarse_offset] |= ((bool_vec_t)in[I] << ((sizeof(bool_vec_t)-1u) * 8u - fine_offset)) & mask;
+        if (fine_offset <= (sizeof(bool_vec_t)-1u) * 8u) {
+            out[coarse_offset] |= ((bool_vec_t)in[I] << ((sizeof(bool_vec_t)-1u) * 8u - fine_offset)) & mask;
+        } else {
+            out[coarse_offset] |= ((bool_vec_t)in[I] >> (fine_offset - (sizeof(bool_vec_t)-1u) * 8u)) & mask;
+        }
 
         if (num_out_bits() - fine_offset < 8u) {
             out[coarse_offset+1u] |= (bool_vec_t)in[I] << ((sizeof(bool_vec_t)-1u) * 8u + num_out_bits() - fine_offset);

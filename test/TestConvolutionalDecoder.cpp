@@ -29,7 +29,7 @@ TEST(ConvolutionalDecoderTest, ReferenceDecode) {
     /* Set up test buffers. */
     uint8_t test_in[1024u] = {};
     uint8_t test_out[TestEncoder::calculate_output_length(sizeof(test_in))] = {0xaa};
-    uint8_t test_decoded_fecmagic[1024u] = {};
+    uint8_t test_decoded_fecmagic[TestDecoder::calculate_output_length(sizeof(test_out))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -53,7 +53,7 @@ TEST(ConvolutionalDecoderTest, Decode) {
     /* Set up test buffers. */
     uint8_t test_in[1024u] = {};
     uint8_t test_out[TestEncoder::calculate_output_length(sizeof(test_in))] = {0xaa};
-    uint8_t test_decoded[1024u] = {};
+    uint8_t test_decoded[TestDecoder::calculate_output_length(sizeof(test_out))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -88,7 +88,7 @@ TEST(PuncturedConvolutionalDecoderTest, Decode) {
     /* Set up test buffers. */
     uint8_t test_in[1024u] = {};
     uint8_t test_out[TestEncoderPunctured::calculate_output_length(sizeof(test_in))] = {0xaa};
-    uint8_t test_decoded[1024u] = {};
+    uint8_t test_decoded[TestDecoderPunctured::calculate_output_length(sizeof(test_out))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -98,6 +98,43 @@ TEST(PuncturedConvolutionalDecoderTest, Decode) {
 
     TestEncoderPunctured::encode(test_in, sizeof(test_in), test_out);
     TestDecoderPunctured::decode(test_out, sizeof(test_out), test_decoded);
+
+    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+        EXPECT_EQ((int)test_in[i], (int)test_decoded[i]) << "Buffers differ at index " << i;
+    }
+}
+
+using TestEncoderRate3 = Thiemar::Convolutional::PuncturedConvolutionalEncoder<
+    7u,
+    Thiemar::Convolutional::PuncturingMatrices::n_3_rate_1_3,
+    Thiemar::Convolutional::Polynomials::n_3_k_7_g11,
+    Thiemar::Convolutional::Polynomials::n_3_k_7_g12,
+    Thiemar::Convolutional::Polynomials::n_3_k_7_g13
+>;
+
+using TestDecoderRate3 = Thiemar::Convolutional::PuncturedHardDecisionViterbiDecoder<
+    7u,
+    48u,
+    Thiemar::Convolutional::PuncturingMatrices::n_3_rate_1_3,
+    Thiemar::Convolutional::Polynomials::n_3_k_7_g11,
+    Thiemar::Convolutional::Polynomials::n_3_k_7_g12,
+    Thiemar::Convolutional::Polynomials::n_3_k_7_g13
+>;
+
+TEST(ConvolutionalDecoderRate3Test, Decode) {
+    /* Set up test buffers. */
+    uint8_t test_in[1024u] = {};
+    uint8_t test_out[TestEncoderRate3::calculate_output_length(sizeof(test_in))] = {0xaa};
+    uint8_t test_decoded[TestDecoderRate3::calculate_output_length(sizeof(test_out))] = {};
+
+    /* Seed RNG for repeatibility. */
+    std::srand(123u);
+    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+        test_in[i] = std::rand() & 0xffu;
+    }
+
+    TestEncoderRate3::encode(test_in, sizeof(test_in), test_out);
+    TestDecoderRate3::decode(test_out, sizeof(test_out), test_decoded);
 
     for (std::size_t i = 0u; i < sizeof(test_in); i++) {
         EXPECT_EQ((int)test_in[i], (int)test_decoded[i]) << "Buffers differ at index " << i;

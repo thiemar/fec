@@ -85,6 +85,9 @@ namespace Polynomials {
     using n_2_k_10_g12 = BinarySequence<1, 1, 0, 0, 1, 1, 1, 1, 0, 1>;
     using n_2_k_11_g11 = BinarySequence<1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1>;
     using n_2_k_11_g12 = BinarySequence<1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1>;
+    using n_3_k_7_g11 = BinarySequence<1, 1, 1, 1, 0, 0, 1>;
+    using n_3_k_7_g12 = BinarySequence<1, 1, 1, 0, 1, 0, 1>;
+    using n_3_k_7_g13 = BinarySequence<1, 0, 1, 1, 0, 1, 1>;
 }
 
 /* Standard puncturing matrix convenience definitions. */
@@ -94,6 +97,7 @@ namespace PuncturingMatrices {
     using n_2_rate_3_4 = BinarySequence<1, 1, 0, 1, 1, 0>;
     using n_2_rate_5_6 = BinarySequence<1, 1, 0, 1, 1, 0, 0, 1, 1, 0>;
     using n_2_rate_7_8 = BinarySequence<1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0>;
+    using n_3_rate_1_3 = BinarySequence<1, 1, 1>;
 }
 
 template <std::size_t ConstraintLength, typename PuncturingMatrix, typename... Polynomials>
@@ -228,8 +232,8 @@ public:
                 &in[i - std::min(i, flush_bytes)],
                 std::min(block_size(), len - i) + std::min(i, flush_bytes));
             encode_block(&in_block[flush_bytes], out_block);
-            std::memcpy(&out[out_idx], out_block, interleaver::out_buf_len());
-            out_idx += interleaver::out_buf_len();
+            std::memcpy(&out[out_idx], out_block, std::min(interleaver::out_buf_len(), calculate_output_length(len) - out_idx));
+            out_idx += std::min(interleaver::out_buf_len(), calculate_output_length(len) - out_idx);
         }
 
         return out_idx;
