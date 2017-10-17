@@ -112,6 +112,13 @@ class ReedSolomonEncoder {
     using gf = GaloisField<M, Primitive>;
     using gf_t = typename gf::gf_t;
 
+    template <std::size_t Len, std::size_t... SyndromeIndices>
+    static void calculate_syndromes(const std::array<gf_t, Len>& message, gf_t *syndromes,
+            std::index_sequence<SyndromeIndices...>) {
+        int _[] = { (syndromes[SyndromeIndices] = gf::evaluate(message, gf::antilog(SyndromeIndices+1u)), 0)... };
+        (void)_;
+    }
+
 public:
     using generator = typename Detail::generator_polynomial<gf, Parity>::coefficients;
 
@@ -128,6 +135,46 @@ public:
         std::array<gf_t, Parity> parity = gf::remainder(message, generator{},
             std::make_index_sequence<Parity>{});
         memcpy(&buf[N], parity.data(), Parity);
+    }
+
+    template <std::size_t N>
+    static gf_t check(gf_t *buf) {
+        static_assert(N <= (1u << M) - 1u - Parity,
+            "Data length must be smaller than or equal to block size minus parity length");
+        std::array<gf_t, N+Parity> message = Detail::to_array<gf_t, N+Parity>(buf);
+
+        /* Calculate syndromes. */
+        gf_t syndromes[Parity];
+        calculate_syndromes(message, syndromes, std::make_index_sequence<Parity>{});
+
+        return *std::max_element((gf_t *)syndromes, (gf_t *)syndromes + Parity);
+    }
+
+    /*
+    Apply Reed-Solmon error correction using the Berlekamp-Massey algorithm,
+    which tends to be faster than syndromeless algorithms for high code
+    rates:
+    http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.313.5200&rep=rep1&type=pdf
+    */
+    template <std::size_t N>
+    static void decode(gf_t *buf) {
+        static_assert(N <= (1u << M) - 1u - Parity,
+            "Data length must be smaller than or equal to block size minus parity length");
+        std::array<gf_t, N+Parity> message = Detail::to_array<gf_t, N+Parity>(buf);
+
+        /* Calculate syndromes. */
+        gf_t syndromes[Parity];
+        calculate_syndromes(message, syndromes, std::make_index_sequence<Parity>{});
+
+        /* Check for the no-error case, and terminate early if so. */
+
+        /* Calculate Forney syndromes. */
+
+        /* Compute Berlekamp-Massey error locator polynomial. */
+
+        /* Find error locations using Chien search. */
+
+        /* Apply corrections to errors. */
     }
 };
 

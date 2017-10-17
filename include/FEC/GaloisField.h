@@ -196,6 +196,18 @@ public:
 
         return std::array<gf_t, sizeof...(Gs)>{ d[Len1 - sizeof...(Gs) + Is]... };
     }
+
+    /* Evaluate a polynomial for a particular value of x. */
+    template <std::size_t Len>
+    static gf_t evaluate(const std::array<gf_t, Len>& poly, gf_t x) {
+        gf_t y = poly[0];
+
+        for (std::size_t i = 1u; i < Len; i++) {
+            y = multiply(y, x) ^ poly[i];
+        }
+
+        return y;
+    }
 };
 
 template <typename T, std::size_t M, typename Primitive>
