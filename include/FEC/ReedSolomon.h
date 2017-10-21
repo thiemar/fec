@@ -155,9 +155,13 @@ public:
     which tends to be faster than syndromeless algorithms for high code
     rates:
     http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.313.5200&rep=rep1&type=pdf
+
+    Returns true if errors were able to be corrected, and false otherwise.
+    Note that a return value of 'true' does not mean that there are no
+    errors, since only up to Parity/2 errors can be corrected.
     */
     template <std::size_t N>
-    static void decode(gf_t *buf) {
+    static bool decode(gf_t *buf) {
         static_assert(N <= (1u << M) - 1u - Parity,
             "Data length must be smaller than or equal to block size minus parity length");
         std::array<gf_t, N+Parity> message = Detail::to_array<gf_t, N+Parity>(buf);
@@ -167,10 +171,12 @@ public:
         calculate_syndromes(message, syndromes, std::make_index_sequence<Parity>{});
 
         /* Check for the no-error case, and terminate early if so. */
-
-        /* Calculate Forney syndromes. */
+        if (*std::max_element((gf_t *)syndromes, (gf_t *)syndromes + Parity) == 0u) {
+            return true;
+        }
 
         /* Compute Berlekamp-Massey error locator polynomial. */
+        
 
         /* Find error locations using Chien search. */
 
