@@ -1,15 +1,15 @@
 % Polar code testbench.
-N = 2^10;
-K = N/2;
-design_snr = 0;
-frozen = polar_construction(N, K, 'log', design_snr);
+N = 2^11;
+K = round(N/2);
+design_snr = 5;
+frozen = polar_construction(N, K, 'piecewise_integer', design_snr);
 
 % Encode some random data.
 rng(123);
 
 % BPSK AWGN channel simulation.
 sims = 1000;
-Eb_N0 = 0:0.5:4;
+Eb_N0 = 0:0.5:2;
 FER_coded = zeros(size(Eb_N0));
 FER_uncoded = zeros(size(Eb_N0));
 for i = 1:numel(Eb_N0)
