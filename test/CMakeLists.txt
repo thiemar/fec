@@ -35,7 +35,8 @@ ADD_EXECUTABLE(unittest
     TestConvolutionalEncoder.cpp
     TestConvolutionalDecoder.cpp
     TestGaloisField.cpp
-    TestReedSolomonEncoder.cpp)
+    TestReedSolomonEncoder.cpp
+    TestPolarCodeConstruction.cpp)
 
 # Create dependency of test on googletest
 ADD_DEPENDENCIES(unittest googletest fecmagic ezpwd_rs mersinvald_reed_solomon)

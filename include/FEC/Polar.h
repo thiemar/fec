@@ -28,14 +28,19 @@ SOFTWARE.
 #include <utility>
 
 #include "FEC/Types.h"
+#include "FEC/BinarySequence.h"
+#include "FEC/Convolutional.h"
 
 namespace Thiemar {
 
 namespace Detail {
     /* Function for computing integer log2 at compile time. */
     constexpr std::size_t log2(std::size_t n) {
-        static_assert(n != 0u, "Result of log2(0) is undefined");
-        return n == 1u ? 0u : 1u + log2(n / 2u);
+        if (n == 0u) {
+            return 0u;
+        } else {
+            return n == 1u ? 0u : 1u + log2(n / 2u);
+        }
     }
 
     /* Helper class used to sorted an index sequence. */
@@ -44,21 +49,52 @@ namespace Detail {
 
     template <std::size_t... Is>
     struct SortedIndexSequence<std::index_sequence<Is...>> {
-        using index_sequence = ;
+        // using index_sequence = ;
     };
+
+    /*
+    Calculate upper B-parameter bound in log-domain using a piecewise integer
+    approximation.
+    */
+    constexpr int32_t update_upper_approx(int32_t in) {
+        if (in > 1) {
+            return 2*in;
+        } else {
+            return in + 1;
+        }
+    }
+
+    /*
+    Calculate lower B-parameter bound in log-domain using a piecewise integer
+    approximation.
+    */
+    constexpr int32_t update_lower_approx(int32_t in) {
+        if (in > -1) {
+            return in - 1;
+        } else {
+            return 2*in;
+        }
+    }
 
     /* Helper class used for calculating frozen bit indices. */
-    template <std::size_t N, typename Seq>
-    struct FrozenBitsIndexSequence;
-
-    template <std::size_t N, std::size_t... StageIndices>
-    struct FrozenBitsIndexSequence<1u, std::index_sequence<StageIndices...>> {
-        using index_sequence = std::index_sequence<...>;
+    template <std::size_t N, int32_t U, int32_t L>
+    struct BhattacharyyaBoundHelper {
+        using b_param_sequence = typename concat_seq<
+            typename BhattacharyyaBoundHelper<N - 1u, update_upper_approx(U), update_lower_approx(U)>::b_param_sequence,
+            typename BhattacharyyaBoundHelper<N - 1u, update_upper_approx(L), update_lower_approx(L)>::b_param_sequence
+        >::integer_sequence;
     };
 
-    template <std::size_t N, std::size_t... StageIndices>
-    struct FrozenBitsIndexSequence<N, std::index_sequence<StageIndices...>> {
-        using index_sequence = FrozenBitsIndexSequence<N / 2u, >::index_sequence;
+    template <int32_t U, int32_t L>
+    struct BhattacharyyaBoundHelper<1u, U, L> {
+        using b_param_sequence = std::integer_sequence<int32_t,
+            update_upper_approx(U), update_lower_approx(U), update_upper_approx(L), update_lower_approx(L)>;
+    };
+
+    template <std::size_t N, int SNR>
+    struct BhattacharyyaBoundSequence {
+        using b_param_sequence = typename BhattacharyyaBoundHelper<N - 1u,
+            update_upper_approx(SNR), update_lower_approx(SNR)>::b_param_sequence;
     };
 }
 
@@ -111,8 +147,8 @@ public:
     A compile-time index sequence containing the indices of the frozen bits
     in sorted order.
     */
-    using frozen_index_sequence = typename Detail::SortedIndexSequence<Detail::FrozenBitsIndexSequence<
-        N, std::make_index_sequence<Detail::log2(N)>>::index_sequence>::index_sequence;
+    using frozen_index_sequence = typename Detail::SortedIndexSequence<
+        typename Detail::BhattacharyyaBoundSequence<N, SNR>::b_param_sequence>::index_sequence;
 };
 
 /*
@@ -157,7 +193,7 @@ public:
         /* Expand input buffer to length N/8 bytes. */
 
         /* Run encoding stages. */
-        encode_stages(in, len, out, std::make_index_sequence<>{});
+        // encode_stages(in, len, out, std::make_index_sequence<>{});
     }
 };
 

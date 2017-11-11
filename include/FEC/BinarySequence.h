@@ -43,7 +43,7 @@ namespace Detail {
     /* Concatenate two integer sequences. */
     template <typename Seq1, typename Seq2> struct concat_seq;
 
-    template <typename T, std::size_t... Is1, std::size_t... Is2>
+    template <typename T, T... Is1, T... Is2>
     struct concat_seq<std::integer_sequence<T, Is1...>, std::integer_sequence<T, Is2...>> {
         using integer_sequence = std::integer_sequence<T, Is1..., Is2...>;
     };
