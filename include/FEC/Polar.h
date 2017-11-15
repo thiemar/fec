@@ -30,6 +30,7 @@ SOFTWARE.
 #include "FEC/Types.h"
 #include "FEC/BinarySequence.h"
 #include "FEC/Convolutional.h"
+#include "FEC/GaloisField.h"
 
 namespace Thiemar {
 
@@ -43,13 +44,91 @@ namespace Detail {
         }
     }
 
-    /* Helper class used to sorted an index sequence. */
-    template <typename Seq>
-    struct SortedIndexSequence;
+    /*
+    Helper classes used to return the N indices in sorted order corresponding
+    to the N smallest elements in an integer sequence.
+    */
 
-    template <std::size_t... Is>
-    struct SortedIndexSequence<std::index_sequence<Is...>> {
-        // using index_sequence = ;
+    /*
+    This function finds the smallest value of an integer sequence below which
+    there are no fewer than K elements.
+    */
+    template <std::size_t K, int32_t... Bs>
+    constexpr int32_t get_pivot_value(int32_t pivot, int32_t max, int32_t min,
+            std::integer_sequence<int32_t, Bs...>) {
+        std::size_t sum = 0u;
+        for (int32_t i : { Bs... }) {
+            if (i <= pivot) {
+                sum++;
+            }
+        }
+
+        int32_t next_pivot = pivot;
+        int32_t next_max = max;
+        int32_t next_min = min;
+        if (sum > K) {
+            next_pivot = (pivot + min) / 2;
+            next_max = pivot;
+        } else if(sum < K) {
+            next_pivot = (max + pivot) / 2;
+            next_min = pivot;
+        }
+
+        if (next_pivot == pivot) {
+            return pivot;
+        } else {
+            return get_pivot_value<K>(next_pivot, next_max, next_min,
+                std::integer_sequence<int32_t, Bs...>{});
+        }
+    }
+
+    template <std::size_t K, int32_t... Bs>
+    constexpr int32_t get_pivot_value(std::integer_sequence<int32_t, Bs...>) {
+        auto b_array = std::array<int32_t, sizeof...(Bs)>{ Bs... };
+        return get_pivot_value<K>((std::get<0u>(b_array) + std::get<sizeof...(Bs) - 1u>(b_array)) / 2,
+            std::get<0u>(b_array), std::get<sizeof...(Bs) - 1u>(b_array), std::integer_sequence<int32_t, Bs...>{});
+    }
+
+    /*
+    The following juggling of array types is required because it is not
+    possible to do constexpr assignments to a std::array until C++17.
+    */
+    template <int32_t Pivot, std::size_t... Is, int32_t... Bs>
+    constexpr auto get_n_indices_below_pivot_impl(std::index_sequence<Is...>, std::integer_sequence<int32_t, Bs...>) {
+        Detail::ConstantArray<std::size_t, sizeof...(Is)> idx_array = {};
+
+        std::size_t idx = 0u;
+        std::size_t count = 0u;
+        for (int32_t i : { Bs... }) {
+            if (i <= Pivot) {
+                idx_array[count++] = idx;
+
+                if (count == sizeof...(Is)) {
+                    break;
+                }
+            }
+
+            idx++;
+        }
+
+        return idx_array;
+    }
+
+    template <int32_t Pivot, std::size_t... Is, int32_t... Bs>
+    constexpr auto get_n_indices_below_pivot(std::index_sequence<Is...>, std::integer_sequence<int32_t, Bs...>) {
+        constexpr std::array<std::size_t, sizeof...(Is)> temp = { get_n_indices_below_pivot_impl<Pivot>(
+            std::index_sequence<Is...>{}, std::integer_sequence<int32_t, Bs...>{})[Is]... };
+
+        return std::index_sequence<std::get<Is>(temp)...>{};
+    }
+
+    template <std::size_t K, int32_t Pivot, typename FrozenSeq, typename ValSeq>
+    struct FrozenBitsIndexSequenceHelper;
+
+    template <std::size_t K, int32_t Pivot, std::size_t... Fs, int32_t... Bs>
+    struct FrozenBitsIndexSequenceHelper<K, Pivot, std::index_sequence<Fs...>, std::integer_sequence<int32_t, Bs...>> {
+        using index_sequence = decltype(get_n_indices_below_pivot<Pivot>(std::make_index_sequence<K>{},
+            std::integer_sequence<int32_t, Bs...>{}));
     };
 
     /*
@@ -142,13 +221,15 @@ class PolarCodeConstructor {
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
 
+    using b_param_sequence = typename Detail::BhattacharyyaBoundSequence<Detail::log2(N), SNR>::b_param_sequence;
+
 public:
     /*
     A compile-time index sequence containing the indices of the frozen bits
     in sorted order.
     */
-    using frozen_index_sequence = typename Detail::SortedIndexSequence<
-        typename Detail::BhattacharyyaBoundSequence<N, SNR>::b_param_sequence>::index_sequence;
+    using frozen_index_sequence = typename Detail::FrozenBitsIndexSequenceHelper<
+        K, Detail::get_pivot_value<K>(b_param_sequence{}), std::make_index_sequence<K>, b_param_sequence>::index_sequence;
 };
 
 /*
@@ -211,7 +292,7 @@ truncated in order to support non-power-of-two encoded lengths.
 
 The algorithm used is the f-SSCL algorithm (fast simplified successive
 cancellation list) described in the following papers:
-[1] 
+[1] https://arxiv.org/pdf/1701.08126.pdf
 */
 template <std::size_t N, std::size_t K, typename FrozenIndices, std::size_t L = 1u>
 class SuccessiveCancellationListDecoder {

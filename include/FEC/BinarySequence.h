@@ -40,12 +40,17 @@ namespace Detail {
         using index_sequence = std::index_sequence<N - Is...>;
     };
 
-    /* Concatenate two integer sequences. */
-    template <typename Seq1, typename Seq2> struct concat_seq;
+    /* Concatenate integer sequences. */
+    template <typename... T> struct concat_seq;
 
-    template <typename T, T... Is1, T... Is2>
-    struct concat_seq<std::integer_sequence<T, Is1...>, std::integer_sequence<T, Is2...>> {
-        using integer_sequence = std::integer_sequence<T, Is1..., Is2...>;
+    template <typename T, T... Is>
+    struct concat_seq<std::integer_sequence<T, Is...>> {
+        using integer_sequence = std::integer_sequence<T, Is...>;
+    };
+
+    template <typename T, T... Is1, T... Is2, typename... Tail>
+    struct concat_seq<std::integer_sequence<T, Is1...>, std::integer_sequence<T, Is2...>, Tail...> {
+        using integer_sequence = typename concat_seq<std::integer_sequence<T, Is1..., Is2...>, Tail...>::integer_sequence;
     };
 
     /*

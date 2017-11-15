@@ -2,19 +2,20 @@
 #include <cstdlib>
 #include "FEC/Polar.h"
 
-template <int32_t... B>
-constexpr std::array<int32_t, sizeof...(B)> expand_b_params(std::integer_sequence<int32_t, B...>) {
-    return std::array<int32_t, sizeof...(B)>{ B ... };
+template <typename T, T... I>
+constexpr std::array<T, sizeof...(I)> expand_sequence(std::integer_sequence<T, I...>) {
+    return std::array<T, sizeof...(I)>{ I ... };
 }
 
-#define BLOCK_SIZE 10u
+#define N 512u
+#define K 256u
 
 TEST(PolarCodeConstructionTest, CalculateBhattacharyyaBounds) {
-    std::array<int32_t, 1u << BLOCK_SIZE> b_params = expand_b_params(
-        Thiemar::Detail::BhattacharyyaBoundSequence<BLOCK_SIZE, -2>::b_param_sequence{});
+    std::array<std::size_t, K> frozen_indices = expand_sequence(
+        Thiemar::Polar::PolarCodeConstructor<N, K, -2>::frozen_index_sequence{});
 
-    for (std::size_t i = 0u; i < b_params.size(); i++) {
-        printf("%d\n", b_params[i]);
+    for (std::size_t i = 0u; i < frozen_indices.size(); i++) {
+        printf("%lu\n", frozen_indices[i]);
         // EXPECT_EQ((int)test_in[i], (int)test_decoded_fecmagic[i]) << "Buffers differ at index " << i;
     }
 }
