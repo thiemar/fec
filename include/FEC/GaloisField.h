@@ -23,24 +23,16 @@ SOFTWARE.
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <utility>
 
 #include "FEC/Types.h"
+#include "FEC/Utilities.h"
 #include "FEC/BinarySequence.h"
 
 namespace Thiemar {
 
 namespace Detail {
-    template <typename T, std::size_t... I>
-    constexpr T integer_from_index_sequence(std::index_sequence<I...>) {
-        T mask = 0u;
-        for (std::size_t i : { I... }) {
-            mask |= (i < sizeof(T) * 8u) ? (T)1u << i : 0u;
-        }
-
-        return mask;
-    }
-
     template <typename T, std::size_t M, std::size_t G>
     constexpr T get_field_element(std::size_t idx) {
         T e = 1u;
@@ -54,14 +46,6 @@ namespace Detail {
 
         return e;
     }
-
-    /* Need an array class with constexpr access operators. */
-    template <typename T, std::size_t N>
-    struct ConstantArray {
-        T data[N];
-        constexpr T& operator[](std::size_t i) { return data[i]; }
-        constexpr const T& operator[](std::size_t i) const { return data[i]; }
-    };
 }
 
 /* Class for doing arithmetic operations in the specified Galois field. */

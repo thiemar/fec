@@ -29,17 +29,13 @@ SOFTWARE.
 #include <utility>
 
 #include "FEC/Types.h"
+#include "FEC/Utilities.h"
 #include "FEC/BinarySequence.h"
 
 namespace Thiemar {
 
 namespace Detail {
     /* Helper functions for interleaver. */
-    template <std::size_t N, std::size_t... I>
-    constexpr std::size_t get_index(std::index_sequence<I...>) {
-        return std::get<N>(std::array<std::size_t, sizeof...(I)>{ I... });
-    }
-
     template <std::size_t NumPoly, std::size_t PolyIndex, std::size_t Count, typename PuncturingMatrix, bool... RowBits>
     struct PuncturingMatrixRow;
 
@@ -93,38 +89,6 @@ namespace Detail {
     struct UnwrappedOutputIndexSequence<PuncturingMatrix, NumPoly, PolyIndex, std::index_sequence<N...>> {
         using type = std::index_sequence<wrapped_output_index<NumPoly, PolyIndex, N>(PuncturingMatrix{})...>;
     };
-
-    template <typename Seq1, typename Seq2> struct DiffIndexSequence;
-
-    template <std::size_t... Is1, std::size_t... Is2>
-    struct DiffIndexSequence<std::index_sequence<Is1...>, std::index_sequence<Is2...>> {
-        using type = std::index_sequence<Is1 - Is2...>;
-    };
-
-    constexpr bool_vec_t mask_bits(std::size_t N) {
-        return ~(((bool_vec_t)1u << (sizeof(bool_vec_t) * 8u - N)) - 1u);
-    }
-
-    template <std::size_t... MaskIndices>
-    constexpr bool_vec_t mask_from_index_sequence(std::index_sequence<MaskIndices...>) {
-        bool_vec_t mask = 0u;
-        for (std::size_t i : { MaskIndices... }) {
-            mask |= (i < sizeof(bool_vec_t) * 8u) ? (bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u)-1u - i) : 0u;
-        }
-
-        return mask;
-    }
-
-    template <std::size_t... I>
-    constexpr bool index_sequence_below_threshold(std::size_t threshold, std::index_sequence<I...>) {
-        for (std::size_t i : { I... }) {
-            if (i >= threshold) {
-                return false;
-            }
-        }
-
-        return true;
-    }
 
     /*
     Use magic numbers to spread input word as efficiently as possible based

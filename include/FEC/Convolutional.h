@@ -23,34 +23,19 @@ SOFTWARE.
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <type_traits>
 #include <utility>
 
 #include "FEC/Types.h"
+#include "FEC/Utilities.h"
 #include "FEC/BinarySequence.h"
 #include "FEC/Interleaver.h"
 
 namespace Thiemar {
 
 namespace Detail {
-    /* Used for doing validity checks on template parameter packs. */
-    template <bool...> struct bool_pack;
-    template <bool... v>
-    using all_true = std::is_same<bool_pack<true, v...>, bool_pack<v..., true>>;
-
-    /* Calculate Hamming weight of a word. */
-    template <typename T>
-    constexpr T calculate_hamming_weight(T in) {
-        T weight = 0u;
-
-        for (std::size_t i = 0u; i < sizeof(T) * 8u; i++) {
-            weight += (in & ((T)1u << i)) ? 1u : 0u;
-        }
-
-        return weight;
-    }
-
     /* Create a Hamming distance look-up table for the given type. */
     template <typename T, std::size_t NumPoly, T PunctureMask, T Reference>
     class HammingDistance {

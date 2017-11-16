@@ -23,26 +23,17 @@ SOFTWARE.
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <type_traits>
 #include <utility>
 
 #include "FEC/Types.h"
-#include "FEC/BinarySequence.h"
-#include "FEC/Convolutional.h"
+#include "FEC/Utilities.h"
 
 namespace Thiemar {
 
 namespace Detail {
-    /* Function for computing integer log2 at compile time. */
-    constexpr std::size_t log2(std::size_t n) {
-        if (n == 0u) {
-            return 0u;
-        } else {
-            return n == 1u ? 0u : 1u + log2(n / 2u);
-        }
-    }
-
     /*
     Helper classes used to return the N indices in sorted order corresponding
     to the N smallest elements in an integer sequence.
@@ -138,7 +129,7 @@ namespace Detail {
     /* Helper class used for calculating non-frozen bit indices. */
     template <std::size_t N, int32_t U, int32_t L>
     struct BhattacharyyaBoundHelper {
-        using b_param_sequence = typename concat_seq<
+        using b_param_sequence = typename Detail::concat_seq<
             typename BhattacharyyaBoundHelper<N - 1u, update_upper_approx(U), update_lower_approx(U)>::b_param_sequence,
             typename BhattacharyyaBoundHelper<N - 1u, update_upper_approx(L), update_lower_approx(L)>::b_param_sequence
         >::integer_sequence;
@@ -232,6 +223,15 @@ class PolarEncoder {
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
     static_assert(DataIndices::size() == K, "Number of data bits must be equal to K");
 
+    /*
+    Expand the data in the input buffer into the indices of the output buffer
+    indicated by the Is parameter pack.
+    */
+    template <std::size_t... Is>
+    static void expand_buffer(std::index_sequence<Is...>) {
+
+    }
+
     template <std::size_t... StageIndices>
     static void encode_stages(const uint8_t *in, std::size_t len, uint8_t *out, std::index_sequence<StageIndices...>) {
         int _[] = { (encode_stage<StageIndices>(), 0)... };
@@ -252,6 +252,7 @@ public:
         uint8_t buf_expanded[N / 8u];
 
         /* Expand input buffer to length N/8 bytes. */
+        // expand_buffer();
 
         /* Run encoding stages. */
         // encode_stages(in, len, out, std::make_index_sequence<>{});

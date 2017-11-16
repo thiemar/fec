@@ -27,11 +27,10 @@ SOFTWARE.
 #include <utility>
 
 #include "FEC/Types.h"
+#include "FEC/Utilities.h"
 #include "FEC/GaloisField.h"
 
 namespace Thiemar {
-
-namespace ReedSolomon {
 
 namespace Detail {
     /*
@@ -78,27 +77,9 @@ namespace Detail {
     struct generator_polynomial<GF, Parity, 0u> {
         using coefficients = std::integer_sequence<typename GF::gf_t, 1u>;
     };
-
-    template <typename T, std::size_t N, std::size_t... I>
-    constexpr std::array<T, N> to_array_impl(const T (&a)[N], std::index_sequence<I...>) {
-        return { {a[I]...} };
-    }
-     
-    template <typename T, std::size_t N>
-    constexpr std::array<T, N> to_array(const T (&a)[N]) {
-        return to_array_impl(a, std::make_index_sequence<N>{});
-    }
-
-    template <typename T, std::size_t N, std::size_t... I>
-    constexpr std::array<T, N> to_array_impl(T *a, std::index_sequence<I...>) {
-        return { {a[I]...} };
-    }
-     
-    template <typename T, std::size_t N>
-    constexpr std::array<T, N> to_array(T *a) {
-        return to_array_impl<T, N>(a, std::make_index_sequence<N>{});
-    }
 }
+
+namespace ReedSolomon {
 
 namespace Polynomials {
     using m_8_285 = BinarySequence<1, 0, 0, 0, 1, 1, 1, 0, 1>;
