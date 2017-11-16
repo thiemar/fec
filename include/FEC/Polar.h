@@ -30,7 +30,6 @@ SOFTWARE.
 #include "FEC/Types.h"
 #include "FEC/BinarySequence.h"
 #include "FEC/Convolutional.h"
-#include "FEC/GaloisField.h"
 
 namespace Thiemar {
 
@@ -53,8 +52,8 @@ namespace Detail {
     This function finds the smallest value of an integer sequence below which
     there are no fewer than K elements.
     */
-    template <std::size_t K, int32_t... Bs>
-    constexpr int32_t get_pivot_value(int32_t pivot, int32_t max, int32_t min,
+    template <int32_t... Bs>
+    constexpr int32_t get_pivot_value(std::size_t k, int32_t pivot, int32_t max, int32_t min,
             std::integer_sequence<int32_t, Bs...>) {
         std::size_t sum = 0u;
         for (int32_t i : { Bs... }) {
@@ -66,10 +65,10 @@ namespace Detail {
         int32_t next_pivot = pivot;
         int32_t next_max = max;
         int32_t next_min = min;
-        if (sum > K) {
+        if (sum > k) {
             next_pivot = (pivot + min) / 2;
             next_max = pivot;
-        } else if(sum < K) {
+        } else if(sum < k) {
             next_pivot = (max + pivot) / 2;
             next_min = pivot;
         }
@@ -77,58 +76,39 @@ namespace Detail {
         if (next_pivot == pivot) {
             return pivot;
         } else {
-            return get_pivot_value<K>(next_pivot, next_max, next_min,
+            return get_pivot_value(k, next_pivot, next_max, next_min,
                 std::integer_sequence<int32_t, Bs...>{});
         }
     }
 
-    template <std::size_t K, int32_t... Bs>
-    constexpr int32_t get_pivot_value(std::integer_sequence<int32_t, Bs...>) {
+    template <int32_t... Bs>
+    constexpr int32_t get_pivot_value(std::size_t k, std::integer_sequence<int32_t, Bs...>) {
         auto b_array = std::array<int32_t, sizeof...(Bs)>{ Bs... };
-        return get_pivot_value<K>((std::get<0u>(b_array) + std::get<sizeof...(Bs) - 1u>(b_array)) / 2,
+        return get_pivot_value(k, (std::get<0u>(b_array) + std::get<sizeof...(Bs) - 1u>(b_array)) / 2,
             std::get<0u>(b_array), std::get<sizeof...(Bs) - 1u>(b_array), std::integer_sequence<int32_t, Bs...>{});
     }
 
-    /*
-    The following juggling of array types is required because it is not
-    possible to do constexpr assignments to a std::array until C++17.
-    */
-    template <int32_t Pivot, std::size_t... Is, int32_t... Bs>
-    constexpr auto get_n_indices_below_pivot_impl(std::index_sequence<Is...>, std::integer_sequence<int32_t, Bs...>) {
-        Detail::ConstantArray<std::size_t, sizeof...(Is)> idx_array = {};
-
+    template <int32_t... Bs>
+    constexpr std::size_t get_nth_index_below_pivot(std::size_t n, int32_t pivot, std::integer_sequence<int32_t, Bs...>) {
         std::size_t idx = 0u;
         std::size_t count = 0u;
         for (int32_t i : { Bs... }) {
-            if (i <= Pivot) {
-                idx_array[count++] = idx;
-
-                if (count == sizeof...(Is)) {
-                    break;
-                }
+            if (i <= pivot && count++ == n) {
+                return idx;
             }
 
             idx++;
         }
 
-        return idx_array;
+        return idx;
     }
 
-    template <int32_t Pivot, std::size_t... Is, int32_t... Bs>
-    constexpr auto get_n_indices_below_pivot(std::index_sequence<Is...>, std::integer_sequence<int32_t, Bs...>) {
-        constexpr std::array<std::size_t, sizeof...(Is)> temp = { get_n_indices_below_pivot_impl<Pivot>(
-            std::index_sequence<Is...>{}, std::integer_sequence<int32_t, Bs...>{})[Is]... };
+    template <std::size_t K, int32_t Pivot, typename DataIdxSeq, typename ValSeq>
+    struct DataBitsIndexSequenceHelper;
 
-        return std::index_sequence<std::get<Is>(temp)...>{};
-    }
-
-    template <std::size_t K, int32_t Pivot, typename FrozenSeq, typename ValSeq>
-    struct FrozenBitsIndexSequenceHelper;
-
-    template <std::size_t K, int32_t Pivot, std::size_t... Fs, int32_t... Bs>
-    struct FrozenBitsIndexSequenceHelper<K, Pivot, std::index_sequence<Fs...>, std::integer_sequence<int32_t, Bs...>> {
-        using index_sequence = decltype(get_n_indices_below_pivot<Pivot>(std::make_index_sequence<K>{},
-            std::integer_sequence<int32_t, Bs...>{}));
+    template <std::size_t K, int32_t Pivot, std::size_t... Fs, typename ValSeq>
+    struct DataBitsIndexSequenceHelper<K, Pivot, std::index_sequence<Fs...>, ValSeq> {
+        using index_sequence = std::index_sequence<get_nth_index_below_pivot(Fs, Pivot, ValSeq{})...>;
     };
 
     /*
@@ -155,7 +135,7 @@ namespace Detail {
         }
     }
 
-    /* Helper class used for calculating frozen bit indices. */
+    /* Helper class used for calculating non-frozen bit indices. */
     template <std::size_t N, int32_t U, int32_t L>
     struct BhattacharyyaBoundHelper {
         using b_param_sequence = typename concat_seq<
@@ -225,17 +205,17 @@ class PolarCodeConstructor {
 
 public:
     /*
-    A compile-time index sequence containing the indices of the frozen bits
-    in sorted order.
+    A compile-time index sequence containing the indices of the non-frozen
+    bits in sorted order.
     */
-    using frozen_index_sequence = typename Detail::FrozenBitsIndexSequenceHelper<
-        K, Detail::get_pivot_value<K>(b_param_sequence{}), std::make_index_sequence<K>, b_param_sequence>::index_sequence;
+    using data_index_sequence = typename Detail::DataBitsIndexSequenceHelper<
+        K, Detail::get_pivot_value(K, b_param_sequence{}), std::make_index_sequence<K>, b_param_sequence>::index_sequence;
 };
 
 /*
 Polar encoder with a block size of N (must be a power of two) and K
-information bits (must be smaller than or equal to N). The FrozenIndices type
-is an index sequence with the indices of the (N - K) frozen bits.
+information bits (must be smaller than or equal to N). The DataIndices type
+is an index sequence with the indices of the K non-frozen bits.
 
 This encoder also supports shortened polar codes, where the output block is
 truncated in order to support non-power-of-two encoded lengths.
@@ -245,12 +225,12 @@ The implementation here is largely derived from the following papers:
 [2] https://arxiv.org/pdf/1504.00353.pdf
 [3] https://arxiv.org/pdf/1604.08104.pdf
 */
-template <std::size_t N, std::size_t K, typename FrozenIndices>
+template <std::size_t N, std::size_t K, typename DataIndices>
 class PolarEncoder {
     static_assert(N >= 8u && Detail::calculate_hamming_weight(N) == 1u, "Block size must be a power of two and a multiple of 8");
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
-    static_assert(FrozenIndices::size() == (N - K), "Number of frozen bits must be equal to (N - K)");
+    static_assert(DataIndices::size() == K, "Number of data bits must be equal to K");
 
     template <std::size_t... StageIndices>
     static void encode_stages(const uint8_t *in, std::size_t len, uint8_t *out, std::index_sequence<StageIndices...>) {
@@ -281,8 +261,8 @@ public:
 /*
 Successive cancellation list decoder with a block size of N (must be a power
 of two) and K information bits (must be smaller than or equal to N). The
-FrozenIndices type is an index sequence with the indices of the (N - K)
-frozen bits.
+DataIndices type is an index sequence with the indices of the K
+non-frozen bits.
 
 The size of the list used is specified by the 'L' parameter. If set to the
 default value of one, a non-list version of the algorithm is used.
@@ -294,12 +274,12 @@ The algorithm used is the f-SSCL algorithm (fast simplified successive
 cancellation list) described in the following papers:
 [1] https://arxiv.org/pdf/1701.08126.pdf
 */
-template <std::size_t N, std::size_t K, typename FrozenIndices, std::size_t L = 1u>
+template <std::size_t N, std::size_t K, typename DataIndices, std::size_t L = 1u>
 class SuccessiveCancellationListDecoder {
     static_assert(N >= 8u && Detail::calculate_hamming_weight(N) == 1u, "Block size must be a power of two and a multiple of 8");
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
-    static_assert(FrozenIndices::size() == (N - K), "Number of frozen bits must be equal to (N - K)");
+    static_assert(DataIndices::size() == K, "Number of data bits must be equal to K");
     static_assert(L >= 1u, "List length must be at least one");
 
 public:
