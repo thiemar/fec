@@ -225,11 +225,36 @@ class PolarEncoder {
 
     /*
     Expand the data in the input buffer into the indices of the output buffer
-    indicated by the Is parameter pack.
+    indicated by the DataIndices index sequence.
     */
-    template <std::size_t... Is>
-    static void expand_buffer(std::index_sequence<Is...>) {
+    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
+    static void expand_buffer(uint8_t *buf, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>) {
+        /* Calculate new index sequences. */
+        using new_input_sequence = std::index_sequence<DiffIndices & ShiftIndex ? InputIndices + ShiftIndex : InputIndices...>;
+        using new_diff_sequence = std::index_sequence<DiffIndices & ShiftIndex ? DiffIndices - ShiftIndex : DiffIndices...>;
 
+        /* Calculate masks. */
+        constexpr std::array<uint8_t, N / 8u> mask_shift = Detail::mask_buffer_from_index_sequence<N>(
+            std::index_sequence<DiffIndices & ShiftIndex ? InputIndices : N ...>{});
+        constexpr std::array<uint8_t, N / 8u> mask_static = Detail::mask_buffer_from_index_sequence<N>(
+            std::index_sequence<DiffIndices < ShiftIndex ? InputIndices : N ...>{});
+
+        /* Shift and mask buffer. */
+        if (ShiftIndex >= 8u) {
+            for (std::size_t i = 0u; i < (N - ShiftIndex) / 8u; i++) {
+                buf[i + ShiftIndex / 8u] = (buf[i + ShiftIndex / 8u] & mask_static[i + ShiftIndex / 8u]) |
+                    (buf[i] & mask_shift[i]);
+            }
+        } else {
+            for (std::size_t i = 0u; i < (N - 1u) / 8u; i++) {
+                buf[i] = (buf[i] & mask_static[i]) | (buf[i] & mask_shift[i]) >> ShiftIndex;
+                buf[i + 1u] = (buf[i + 1u] & mask_static[i + 1u]) | (buf[i] & mask_shift[i]) << (8u - ShiftIndex);
+            }
+        }
+
+        if (ShiftIndex > 1u) {
+            expand_buffer<ShiftIndex / 2u>(buf, new_input_sequence{}, new_diff_sequence{});
+        }
     }
 
     template <std::size_t... StageIndices>
@@ -252,10 +277,15 @@ public:
         uint8_t buf_expanded[N / 8u];
 
         /* Expand input buffer to length N/8 bytes. */
-        // expand_buffer();
+        std::memcpy(buf_expanded, in, N / 8u);
+        expand_buffer<N / 2u>(buf_expanded, std::make_index_sequence<K>{},
+            typename Detail::DiffIndexSequence<DataIndices, std::make_index_sequence<K>>::type{});
 
         /* Run encoding stages. */
         // encode_stages(in, len, out, std::make_index_sequence<>{});
+        std::memcpy(out, buf_expanded, N / 8u);
+
+        return len;
     }
 };
 

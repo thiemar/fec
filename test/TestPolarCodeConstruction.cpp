@@ -15,7 +15,7 @@ TEST(PolarCodeConstructionTest, CalculateBhattacharyyaBounds) {
         Thiemar::Polar::PolarCodeConstructor<N, K, -2>::data_index_sequence{});
 
     for (std::size_t i = 0u; i < data_indices.size(); i++) {
-        printf("%lu\n", data_indices[i]);
+        // printf("%lu\n", data_indices[i]);
         // EXPECT_EQ((int)test_in[i], (int)test_decoded_fecmagic[i]) << "Buffers differ at index " << i;
     }
 }
