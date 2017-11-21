@@ -303,10 +303,10 @@ public:
     buffer must be of size N/8.
     */
     static std::size_t encode(const uint8_t *in, std::size_t len, uint8_t *out) {
-        uint8_t buf_expanded[N / 8u];
+        uint8_t buf_expanded[N / 8u] = {};
 
         /* Expand input buffer to length N/8 bytes. */
-        std::memcpy(buf_expanded, in, N / 8u);
+        std::memcpy(buf_expanded, in, K / 8u);
         expand_buffer<N / 2u>(buf_expanded, std::make_index_sequence<K>{},
             typename Detail::DiffIndexSequence<DataIndices, std::make_index_sequence<K>>::type{});
 

@@ -10,8 +10,8 @@ using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, K, -2>::data_ind
 TEST(PolarEncoderTest, Encode) {
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, K, TestDataIndices>;
 
-    uint8_t test_in[K] = {};
-    uint8_t test_out[N] = {};
+    uint8_t test_in[K / 8u] = {};
+    uint8_t test_out[N / 8u] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -21,7 +21,7 @@ TEST(PolarEncoderTest, Encode) {
 
     TestEncoder::encode(test_in, sizeof(test_in), test_out);
 
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < sizeof(test_out); i++) {
         printf("%x\n", test_out[i]);
         // EXPECT_EQ((int)test_in[i], (int)test_decoded_fecmagic[i]) << "Buffers differ at index " << i;
     }
