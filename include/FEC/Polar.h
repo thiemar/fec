@@ -79,13 +79,41 @@ namespace Detail {
             std::get<0u>(b_array), std::get<sizeof...(Bs) - 1u>(b_array), std::integer_sequence<int32_t, Bs...>{});
     }
 
+    /*
+    This function return the number of values in Bs which are below the pivot
+    value. Used to ensure that only the excess indices with marginal
+    B-parameters are frozen, rather than the ones at the end of the sequence.
+    */
     template <int32_t... Bs>
-    constexpr std::size_t get_nth_index_below_pivot(std::size_t n, int32_t pivot, std::integer_sequence<int32_t, Bs...>) {
-        std::size_t idx = 0u;
+    constexpr std::size_t get_num_below_pivot(int32_t pivot, std::integer_sequence<int32_t, Bs...>) {
         std::size_t count = 0u;
         for (int32_t i : { Bs... }) {
-            if (i <= pivot && count++ == n) {
+            if (i < pivot) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /*
+    Return the nth value in Bs which is smaller than or equal to the pivot
+    value. Only the first r bits which are equal to the pivot value are
+    counted; the rest are ignored.
+    */
+    template <int32_t... Bs>
+    constexpr std::size_t get_nth_index_below_pivot(std::size_t n, std::size_t r, int32_t pivot,
+            std::integer_sequence<int32_t, Bs...>) {
+        std::size_t idx = 0u;
+        std::size_t count = 0u;
+        std::size_t residual = r;
+        for (int32_t i : { Bs... }) {
+            if ((i < pivot || (residual && i == pivot)) && count++ == n) {
                 return idx;
+            }
+
+            if (residual && i == pivot) {
+                residual--;
             }
 
             idx++;
@@ -99,7 +127,8 @@ namespace Detail {
 
     template <std::size_t K, int32_t Pivot, std::size_t... Fs, typename ValSeq>
     struct DataBitsIndexSequenceHelper<K, Pivot, std::index_sequence<Fs...>, ValSeq> {
-        using index_sequence = std::index_sequence<get_nth_index_below_pivot(Fs, Pivot, ValSeq{})...>;
+        using index_sequence = std::index_sequence<get_nth_index_below_pivot(Fs,
+            K - get_num_below_pivot(Pivot, ValSeq{}), Pivot, ValSeq{})...>;
     };
 
     /*
