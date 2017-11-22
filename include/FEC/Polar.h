@@ -270,15 +270,22 @@ class PolarEncoder {
 
         /* Shift and mask buffer. */
         if (ShiftIndex >= 8u) {
-            for (std::size_t i = 0u; i < (N - ShiftIndex) / 8u; i++) {
-                buf[i + ShiftIndex / 8u] = (buf[i + ShiftIndex / 8u] & mask_static[i + ShiftIndex / 8u]) |
-                    (buf[i] & mask_shift[i]);
+            for (std::size_t i = N / 8u - 1u; i >= ShiftIndex / 8u; i--) {
+                buf[i] = (buf[i] & mask_static[i]) | (buf[i - ShiftIndex / 8u] & mask_shift[i - ShiftIndex / 8u]);
+            }
+
+            /* Remaining indices are all below the shift index. */
+            for (std::size_t i = 0u; i < ShiftIndex / 8u; i++) {
+                buf[i] &= mask_static[i];
             }
         } else {
-            for (std::size_t i = 0u; i < (N - 1u) / 8u; i++) {
-                buf[i] = (buf[i] & mask_static[i]) | (buf[i] & mask_shift[i]) >> ShiftIndex;
-                buf[i + 1u] = (buf[i + 1u] & mask_static[i + 1u]) | (buf[i] & mask_shift[i]) << (8u - ShiftIndex);
+            for (std::size_t i = N / 8u - 1u; i > 0u; i--) {
+                buf[i] = (buf[i] & mask_static[i]) |
+                    ((buf[i] & mask_shift[i]) >> ShiftIndex) |
+                    ((buf[i - 1u] & mask_shift[i - 1u]) << (8u - ShiftIndex));
             }
+
+            buf[0u] = (buf[0u] & mask_static[0u]) | (buf[0u] & mask_shift[0u]) >> ShiftIndex;
         }
 
         if (ShiftIndex > 1u) {
