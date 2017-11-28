@@ -293,15 +293,19 @@ class PolarEncoder {
         }
     }
 
+    /*
+    This function operates on the expanded buffer and completes in log2(N)
+    iterations.
+    */
     template <std::size_t... StageIndices>
-    static void encode_stages(const uint8_t *in, std::size_t len, uint8_t *out, std::index_sequence<StageIndices...>) {
-        int _[] = { (encode_stage<StageIndices>(), 0)... };
+    static void encode_stages(uint8_t *buf, std::index_sequence<StageIndices...>) {
+        int _[] = { (encode_stage<StageIndices>(buf), 0)... };
         (void)_;
     }
 
     template <std::size_t StageIndex>
-    static void encode_stage() {
-
+    static void encode_stage(uint8_t *buf) {
+        
     }
 
 public:
@@ -318,8 +322,8 @@ public:
             typename Detail::DiffIndexSequence<DataIndices, std::make_index_sequence<K>>::type{});
 
         /* Run encoding stages. */
-        // encode_stages(in, len, out, std::make_index_sequence<>{});
-        std::memcpy(out, buf_expanded, N / 8u);
+        encode_stages(buf_expanded, std::make_index_sequence<Detail::log2(N)>{});
+        std::memcpy(out, buf_expanded, len);
 
         return len;
     }
