@@ -168,6 +168,23 @@ struct concat_seq<std::integer_sequence<T, Is1...>, std::integer_sequence<T, Is2
     using integer_sequence = typename concat_seq<std::integer_sequence<T, Is1..., Is2...>, Tail...>::integer_sequence;
 };
 
+/* Select elements from an integer sequence within a defined range. */
+template <typename T, T L, T U, typename Seq> struct select_sequence_range;
+
+template <typename T, T L, T U, T... Is>
+struct select_sequence_range<T, L, U, std::integer_sequence<T, Is...>> {
+    using integer_sequence = std::integer_sequence<T>;
+};
+
+template <typename T, T L, T U, T I, T... Is>
+struct select_sequence_range<T, L, U, std::integer_sequence<T, I, Is...>> {
+    using integer_sequence = std::conditional_t<I >= L && I < U,
+        typename Detail::concat_seq<
+            std::integer_sequence<T, I>,
+            typename select_sequence_range<T, L, U, std::integer_sequence<T, Is...>>::integer_sequence>::integer_sequence,
+        typename select_sequence_range<T, L, U, std::integer_sequence<T, Is...>>::integer_sequence>;
+};
+
 }
 
 }

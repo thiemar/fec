@@ -246,66 +246,75 @@ The implementation here is largely derived from the following papers:
 [3] https://arxiv.org/pdf/1604.08104.pdf
 */
 template <std::size_t N, std::size_t K, typename DataIndices>
-class PolarEncoder {
-    static_assert(N >= 8u && Detail::calculate_hamming_weight(N) == 1u, "Block size must be a power of two and a multiple of 8");
+class PolarEncoder;
+
+template <std::size_t N, std::size_t K, std::size_t... Ds>
+class PolarEncoder<N, K, std::index_sequence<Ds...>> {
+    static_assert(N >= sizeof(bool_vec_t) * 8u && Detail::calculate_hamming_weight(N) == 1u,
+        "Block size must be a power of two and a multiple of the machine word size");
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
-    static_assert(DataIndices::size() == K, "Number of data bits must be equal to K");
+    static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
 
-    /*
-    Expand the data in the input buffer into the indices of the output buffer
-    indicated by the DataIndices index sequence.
-    */
-    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
-    static void expand_buffer(uint8_t *buf, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>) {
-        /* Calculate new index sequences. */
-        using new_input_sequence = std::index_sequence<DiffIndices & ShiftIndex ? InputIndices + ShiftIndex : InputIndices...>;
-        using new_diff_sequence = std::index_sequence<DiffIndices & ShiftIndex ? DiffIndices - ShiftIndex : DiffIndices...>;
+    /* Encode the whole buffer in blocks of bool_vec_t. */
+    template <std::size_t... Is>
+    static std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> encode_stages(const uint8_t *in, std::index_sequence<Is...>) {
+        std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> out = {};
 
-        /* Calculate masks. */
-        constexpr std::array<uint8_t, N / 8u> mask_shift = Detail::mask_buffer_from_index_sequence<N>(
-            std::index_sequence<DiffIndices & ShiftIndex ? InputIndices : N ...>{});
-        constexpr std::array<uint8_t, N / 8u> mask_static = Detail::mask_buffer_from_index_sequence<N>(
-            std::index_sequence<DiffIndices < ShiftIndex ? InputIndices : N ...>{});
-
-        /* Shift and mask buffer. */
-        if (ShiftIndex >= 8u) {
-            for (std::size_t i = N / 8u - 1u; i >= ShiftIndex / 8u; i--) {
-                buf[i] = (buf[i] & mask_static[i]) | (buf[i - ShiftIndex / 8u] & mask_shift[i - ShiftIndex / 8u]);
-            }
-
-            /* Remaining indices are all below the shift index. */
-            for (std::size_t i = 0u; i < ShiftIndex / 8u; i++) {
-                buf[i] &= mask_static[i];
-            }
-        } else {
-            for (std::size_t i = N / 8u - 1u; i > 0u; i--) {
-                buf[i] = (buf[i] & mask_static[i]) |
-                    ((buf[i] & mask_shift[i]) >> ShiftIndex) |
-                    ((buf[i - 1u] & mask_shift[i - 1u]) << (8u - ShiftIndex));
-            }
-
-            buf[0u] = (buf[0u] & mask_static[0u]) | (buf[0u] & mask_shift[0u]) >> ShiftIndex;
-        }
-
-        if (ShiftIndex > 1u) {
-            expand_buffer<ShiftIndex / 2u>(buf, new_input_sequence{}, new_diff_sequence{});
-        }
-    }
-
-    /*
-    This function operates on the expanded buffer and completes in log2(N)
-    iterations.
-    */
-    template <std::size_t... StageIndices>
-    static void encode_stages(uint8_t *buf, std::index_sequence<StageIndices...>) {
-        int _[] = { (encode_stage<StageIndices>(buf), 0)... };
+        /*
+        The first stage uses block operations to expand the buffer into an
+        array of bool_vec_t, ready for efficient word-sized operations.
+        */
+        int _[] = { (out[Is] = encode_block<Is>(in), 0)... };
         (void)_;
+
+        /*
+        Carry out the rest of the encoding on the expanded buffer using full
+        bool_vec_t operations.
+        */
+        constexpr std::size_t num_stages = Detail::log2(N / (sizeof(bool_vec_t) * 8u));
+
+        for (std::size_t i = 0u; i < num_stages; i++) {
+            for (std::size_t j = (std::size_t)1u << i; j < N / (sizeof(bool_vec_t) * 8u); j += (std::size_t)1u << (i + 1u)) {
+                for (std::size_t k = 0u; k < (std::size_t)1u << i; k++) {
+                    out[k] ^= out[k - ((std::size_t)1u << i)];
+                }
+            }
+        }
+
+        return out;
     }
 
-    template <std::size_t StageIndex>
-    static void encode_stage(uint8_t *buf) {
-        
+    /*
+    Encode the Ith bool_vec_t block using data from the input buffer.
+    */
+    template <std::size_t I>
+    static bool_vec_t encode_block(const uint8_t *in) {
+        bool_vec_t in_vec = 0u; // FILL THIS OUT
+
+        using block_data_indices = typename Detail::select_sequence_range<std::size_t,
+            I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, std::index_sequence<Ds...>>::integer_sequence;
+        return encode_block_rows(in_vec, block_data_indices{}, std::make_index_sequence<block_data_indices::size()>{});
+    }
+
+    template <std::size_t... Bs, std::size_t... Is>
+    static bool_vec_t encode_block_rows(bool_vec_t in, std::index_sequence<Bs...>, std::index_sequence<Is...>) {
+        bool_vec_t out = 0u;
+
+        int _[] = { (out ^= (in & ((bool_vec_t)1u << Is)) ? calculate_row<Bs % (sizeof(bool_vec_t) * 8u)>() : 0u, 0)... };
+        (void)_;
+
+        return out;
+    }
+
+    /*
+    For the given data index, return the corresponding generator matrix row.
+    */
+    template <std::size_t I>
+    constexpr static bool_vec_t calculate_row() {
+        bool_vec_t out = 0u; // FILL THIS OUT
+
+        return out;
     }
 
 public:
@@ -314,16 +323,10 @@ public:
     buffer must be of size N/8.
     */
     static std::size_t encode(const uint8_t *in, std::size_t len, uint8_t *out) {
-        uint8_t buf_expanded[N / 8u] = {};
-
-        /* Expand input buffer to length N/8 bytes. */
-        std::memcpy(buf_expanded, in, K / 8u);
-        expand_buffer<N / 2u>(buf_expanded, std::make_index_sequence<K>{},
-            typename Detail::DiffIndexSequence<DataIndices, std::make_index_sequence<K>>::type{});
-
         /* Run encoding stages. */
-        encode_stages(buf_expanded, std::make_index_sequence<Detail::log2(N)>{});
-        std::memcpy(out, buf_expanded, len);
+        auto buf_expanded = encode_stages(in,
+            std::make_index_sequence<N / (sizeof(bool_vec_t) * 8u)>{});
+        std::memcpy(out, (uint8_t *)buf_expanded.data(), len);
 
         return len;
     }
@@ -346,11 +349,14 @@ cancellation list) described in the following papers:
 [1] https://arxiv.org/pdf/1701.08126.pdf
 */
 template <std::size_t N, std::size_t K, typename DataIndices, std::size_t L = 1u>
-class SuccessiveCancellationListDecoder {
+class SuccessiveCancellationListDecoder;
+
+template <std::size_t N, std::size_t K, std::size_t... Ds, std::size_t L>
+class SuccessiveCancellationListDecoder<N, K, std::index_sequence<Ds...>, L> {
     static_assert(N >= 8u && Detail::calculate_hamming_weight(N) == 1u, "Block size must be a power of two and a multiple of 8");
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
-    static_assert(DataIndices::size() == K, "Number of data bits must be equal to K");
+    static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
     static_assert(L >= 1u, "List length must be at least one");
 
 public:
