@@ -259,14 +259,11 @@ class PolarEncoder<N, K, std::index_sequence<Ds...>> {
     /* Encode the whole buffer in blocks of bool_vec_t. */
     template <std::size_t... Is>
     static std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> encode_stages(const uint8_t *in, std::index_sequence<Is...>) {
-        std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> out = {};
-
         /*
         The first stage uses block operations to expand the buffer into an
         array of bool_vec_t, ready for efficient word-sized operations.
         */
-        int _[] = { (out[Is] = encode_block<Is>(in), 0)... };
-        (void)_;
+        std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> out = { encode_block<Is>(in)... };
 
         /*
         Carry out the rest of the encoding on the expanded buffer using full
