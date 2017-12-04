@@ -289,7 +289,7 @@ class PolarEncoder<N, K, std::index_sequence<Ds...>> {
     static bool_vec_t encode_block(const uint8_t *in) {
         bool_vec_t in_vec = 0u; // FILL THIS OUT
 
-        using block_data_indices = typename Detail::select_sequence_range<std::size_t,
+        using block_data_indices = typename Detail::SelectSequenceRange<std::size_t,
             I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, std::index_sequence<Ds...>>::integer_sequence;
         return encode_block_rows(in_vec, block_data_indices{}, std::make_index_sequence<block_data_indices::size()>{});
     }

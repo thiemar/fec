@@ -87,6 +87,12 @@ constexpr T get_index(std::integer_sequence<T, I...>) {
     return std::get<N>(std::array<T, sizeof...(I)>{ I... });
 }
 
+/* Return a new integer sequence with the values at the specified indices. */
+template <typename T, T... I, std::size_t... N>
+constexpr auto get_range(std::integer_sequence<T, I...>, std::index_sequence<N...>) {
+    return std::integer_sequence<T, std::get<N>(std::array<T, sizeof...(I)>{ I... })...>{};
+}
+
 /*
 Helper class for calculating the difference between the elements of two index
 sequences.
@@ -96,6 +102,14 @@ template <typename Seq1, typename Seq2> struct DiffIndexSequence;
 template <std::size_t... Is1, std::size_t... Is2>
 struct DiffIndexSequence<std::index_sequence<Is1...>, std::index_sequence<Is2...>> {
     using type = std::index_sequence<Is1 - Is2...>;
+};
+
+/* Helper class for creating an offset index sequence. */
+template <std::size_t Offset, typename Seq> struct OffsetIndexSequence;
+
+template <std::size_t Offset, std::size_t... Is>
+struct OffsetIndexSequence<Offset, std::index_sequence<Is...>> {
+    using type = std::index_sequence<(Is + Offset)...>;
 };
 
 constexpr bool_vec_t mask_bits(std::size_t N) {
@@ -168,21 +182,48 @@ struct concat_seq<std::integer_sequence<T, Is1...>, std::integer_sequence<T, Is2
     using integer_sequence = typename concat_seq<std::integer_sequence<T, Is1..., Is2...>, Tail...>::integer_sequence;
 };
 
-/* Select elements from an integer sequence within a defined range. */
-template <typename T, T L, T U, typename Seq> struct select_sequence_range;
+/*
+This function gets the first and last indices in an ordered integer sequence
+corresponding to values in the range [L, U).
+*/
+template <typename T, T... Is>
+constexpr std::pair<std::size_t, std::size_t> get_range_extents(T L, T U, std::integer_sequence<T, Is...>) {
+    std::size_t start = 0u;
+    std::size_t end = sizeof...(Is);
+
+    bool got_start = false;
+    std::size_t idx = 0u;
+    for (T i : { Is... }) {
+        if (!got_start && i >= L) {
+            start = idx;
+            got_start = true;
+        }
+
+        if (got_start && i >= U) {
+            end = idx;
+            break;
+        }
+
+        idx++;
+    }
+
+    return std::make_pair(start, end);
+}
 
 template <typename T, T L, T U, T... Is>
-struct select_sequence_range<T, L, U, std::integer_sequence<T, Is...>> {
-    using integer_sequence = std::integer_sequence<T>;
-};
+constexpr auto select_sequence_range_impl(std::integer_sequence<T, Is...>) {
+    constexpr std::pair<std::size_t, std::size_t> extents = get_range_extents(L, U, std::integer_sequence<T, Is...>{});
+    using range_indices = typename OffsetIndexSequence<
+        extents.first, std::make_index_sequence<extents.second - extents.first>>::type;
+    return get_range(std::integer_sequence<T, Is...>{}, range_indices{});
+}
 
-template <typename T, T L, T U, T I, T... Is>
-struct select_sequence_range<T, L, U, std::integer_sequence<T, I, Is...>> {
-    using integer_sequence = std::conditional_t<I >= L && I < U,
-        typename Detail::concat_seq<
-            std::integer_sequence<T, I>,
-            typename select_sequence_range<T, L, U, std::integer_sequence<T, Is...>>::integer_sequence>::integer_sequence,
-        typename select_sequence_range<T, L, U, std::integer_sequence<T, Is...>>::integer_sequence>;
+/* Select elements from an integer sequence within a defined range. */
+template <typename T, T L, T U, typename Seq> struct SelectSequenceRange;
+
+template <typename T, T L, T U, T... Is>
+struct SelectSequenceRange<T, L, U, std::integer_sequence<T, Is...>> {
+    using integer_sequence = decltype(select_sequence_range_impl<T, L, U>(std::integer_sequence<T, Is...>{}));
 };
 
 }
