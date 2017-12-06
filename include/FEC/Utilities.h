@@ -210,22 +210,6 @@ constexpr std::pair<std::size_t, std::size_t> get_range_extents(T L, T U, std::i
     return std::make_pair(start, end);
 }
 
-template <typename T, T L, T U, T... Is>
-constexpr auto select_sequence_range_impl(std::integer_sequence<T, Is...>) {
-    constexpr std::pair<std::size_t, std::size_t> extents = get_range_extents(L, U, std::integer_sequence<T, Is...>{});
-    using range_indices = typename OffsetIndexSequence<
-        extents.first, std::make_index_sequence<extents.second - extents.first>>::type;
-    return get_range(std::integer_sequence<T, Is...>{}, range_indices{});
-}
-
-/* Select elements from an integer sequence within a defined range. */
-template <typename T, T L, T U, typename Seq> struct SelectSequenceRange;
-
-template <typename T, T L, T U, T... Is>
-struct SelectSequenceRange<T, L, U, std::integer_sequence<T, Is...>> {
-    using integer_sequence = decltype(select_sequence_range_impl<T, L, U>(std::integer_sequence<T, Is...>{}));
-};
-
 }
 
 }

@@ -287,18 +287,21 @@ class PolarEncoder<N, K, std::index_sequence<Ds...>> {
     */
     template <std::size_t I>
     static bool_vec_t encode_block(const uint8_t *in) {
-        bool_vec_t in_vec = 0u; // FILL THIS OUT
+        constexpr std::pair<std::size_t, std::size_t> block_extents = Detail::get_range_extents(
+            I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, std::index_sequence<Ds...>{});
+        using range_indices = typename Detail::OffsetIndexSequence<
+            block_extents.first, std::make_index_sequence<block_extents.second - block_extents.first>>::type;
+        using block_data_indices = decltype(Detail::get_range(std::index_sequence<Ds...>{}, range_indices{}));
 
-        using block_data_indices = typename Detail::SelectSequenceRange<std::size_t,
-            I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, std::index_sequence<Ds...>>::integer_sequence;
-        return encode_block_rows(in_vec, block_data_indices{}, std::make_index_sequence<block_data_indices::size()>{});
+        return encode_block_rows(in, block_data_indices{}, range_indices{});
     }
 
     template <std::size_t... Bs, std::size_t... Is>
-    static bool_vec_t encode_block_rows(bool_vec_t in, std::index_sequence<Bs...>, std::index_sequence<Is...>) {
+    static bool_vec_t encode_block_rows(const uint8_t *in, std::index_sequence<Bs...>, std::index_sequence<Is...>) {
         bool_vec_t out = 0u;
 
-        int _[] = { (out ^= (in & ((bool_vec_t)1u << Is)) ? calculate_row<Bs % (sizeof(bool_vec_t) * 8u)>() : 0u, 0)... };
+        int _[] = { (out ^= (in[Is / 8u] & (uint8_t)1u << (7u - (Is % 8u))) ?
+            calculate_row(Bs % (sizeof(bool_vec_t) * 8u)) : 0u, 0)... };
         (void)_;
 
         return out;
@@ -307,11 +310,20 @@ class PolarEncoder<N, K, std::index_sequence<Ds...>> {
     /*
     For the given data index, return the corresponding generator matrix row.
     */
-    template <std::size_t I>
-    constexpr static bool_vec_t calculate_row() {
-        bool_vec_t out = 0u; // FILL THIS OUT
+    template <std::size_t M = sizeof(bool_vec_t) * 8u>
+    constexpr static typename std::enable_if_t<(M > 1u), bool_vec_t> calculate_row(std::size_t r) {
+        static_assert(M <= sizeof(bool_vec_t) * 8u, "Can only calculate blocks up to the size of booL_vec_t");
 
-        return out;
+        if (r >= M / 2u) {
+            return calculate_row<M / 2u>(r % (M / 2u)) | calculate_row<M / 2u>(r % (M / 2u)) >> (M / 2u);
+        } else {
+            return calculate_row<M / 2u>(r % (M / 2u));
+        }
+    }
+
+    template <std::size_t M>
+    constexpr static typename std::enable_if_t<(M == 1u), bool_vec_t> calculate_row(std::size_t r) {
+        return (bool_vec_t)1u << (sizeof(bool_vec_t) * 8u - 1u);
     }
 
 public:
