@@ -8,19 +8,14 @@ TEST(PolarEncoderTest, EncodeBlockSize128) {
     using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, K, -2>::data_index_sequence;
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, K, TestDataIndices>;
 
-    uint8_t test_in[K / 8u] = {};
-    uint8_t test_out[N / 8u] = {};
+    std::array<uint8_t, K / 8u> test_in = { 61u, 219u, 159u, 102u, 183u, 50u, 205u, 93u };
 
-    /* Seed RNG for repeatibility. */
-    std::srand(123u);
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
-        test_in[i] = std::rand() & 0xffu;
-    }
+    /* Calculated using support/polar/encode_test.m */
+    std::array<uint8_t, N / 8u> ref_out = { 27u, 11u, 141u, 171u, 14u, 255u, 104u, 80u, 86u, 133u, 149u, 112u, 67u, 113u, 112u, 139u };
 
-    TestEncoder::encode(test_in, sizeof(test_out), test_out);
+    std::array<uint8_t, N / 8u> test_out = TestEncoder::encode(test_in.data());
 
-    for (std::size_t i = 0u; i < sizeof(test_out); i++) {
-        printf("%hhx\n", test_out[i]);
-        // EXPECT_EQ((int)test_in[i], (int)test_decoded_fecmagic[i]) << "Buffers differ at index " << i;
+    for (std::size_t i = 0u; i < test_out.size(); i++) {
+        EXPECT_EQ((int)ref_out[i], (int)test_out[i]) << "Buffers differ at index " << i;
     }
 }

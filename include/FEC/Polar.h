@@ -272,9 +272,9 @@ class PolarEncoder<N, K, std::index_sequence<Ds...>> {
         constexpr std::size_t num_stages = Detail::log2(N / (sizeof(bool_vec_t) * 8u));
 
         for (std::size_t i = 0u; i < num_stages; i++) {
-            for (std::size_t j = (std::size_t)1u << i; j < N / (sizeof(bool_vec_t) * 8u); j += (std::size_t)1u << (i + 1u)) {
+            for (std::size_t j = 0u; j < N / (sizeof(bool_vec_t) * 8u); j += (std::size_t)1u << (i + 1u)) {
                 for (std::size_t k = 0u; k < (std::size_t)1u << i; k++) {
-                    out[k] ^= out[k - ((std::size_t)1u << i)];
+                    out[j + k] ^= out[j + k + ((std::size_t)1u << i)];
                 }
             }
         }
@@ -329,15 +329,21 @@ class PolarEncoder<N, K, std::index_sequence<Ds...>> {
 public:
     /*
     Encode a full block. Input buffer must be of size K/8, and output
-    buffer must be of size N/8.
+    buffer must be of size 'Len' bytes.
     */
-    static std::size_t encode(const uint8_t *in, std::size_t len, uint8_t *out) {
-        /* Run encoding stages. */
-        auto buf_expanded = encode_stages(in,
-            std::make_index_sequence<N / (sizeof(bool_vec_t) * 8u)>{});
-        std::memcpy(out, (uint8_t *)buf_expanded.data(), len);
+    template <std::size_t Len = N / 8u>
+    static std::array<uint8_t, Len> encode(const uint8_t *in) {
+        static_assert(Len * 8u <= N, "Output length must be smaller than or equal to block size");
 
-        return len;
+        /* Run encoding stages. */
+        auto buf_expanded = encode_stages(in, std::make_index_sequence<N / (sizeof(bool_vec_t) * 8u)>{});
+
+        std::array<uint8_t, Len> out;
+        for (std::size_t i = 0u; i < Len; i++) {
+            out[i] = buf_expanded[i / sizeof(bool_vec_t)] >> ((sizeof(bool_vec_t)-1u - (i % sizeof(bool_vec_t))) * 8u);
+        }
+
+        return out;
     }
 };
 

@@ -10,7 +10,7 @@ void PolarEncoderBlockSize1024_Encode(benchmark::State& state) {
 
     /* Set up test buffers. */
     uint8_t test_in[K / 8u] = {};
-    uint8_t test_out[N / 8u] = {};
+    std::array<uint8_t, N / 8u> test_out = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -19,7 +19,7 @@ void PolarEncoderBlockSize1024_Encode(benchmark::State& state) {
     }
 
     while(state.KeepRunning()) {
-        TestEncoder::encode(test_in, sizeof(test_in), test_out);
+        test_out = TestEncoder::encode(test_in);
     }
 }
 
