@@ -374,13 +374,41 @@ class SuccessiveCancellationListDecoder<N, K, std::index_sequence<Ds...>, L> {
     static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
     static_assert(L >= 1u, "List length must be at least one");
 
+    /* Decode the whole buffer in blocks of bool_vec_t. */
+    template <std::size_t S>
+    static std::array<uint8_t, K / 8u> decode_stages(std::array<int8_t, N> alpha) {
+        std::array<uint8_t, K / 8u> out = {};
+
+        return out;
+    }
+
 public:
     /*
     Decode using the f-SSC algorithm described in [1]. Input buffer must be
-    of size N/8, and output buffer must be of size K/8.
+    of size 'Len' bytes, and output buffer must be of size K/8.
     */
-    static std::size_t decode(const uint8_t *in, std::size_t len, uint8_t *out) {
+    template <std::size_t Len = N / 8u>
+    static std::array<uint8_t, K / 8u> decode(const uint8_t *in) {
+        static_assert(Len * 8u <= N, "Input length must be smaller than or equal to block size");
 
+        /* Initialise LLRs based on input data. */
+        std::array<int8_t, N> alpha;
+        for (std::size_t i = 0u; i < Len * 8u; i++) {
+            alpha[i] = in[i / 8u] & ((uint8_t)1u << (7u - (i % 8u))) ? -1 : 1;
+        }
+
+        /*
+        The remaining (shortened) bytes are implicitly set to zero (one when
+        represented as an LLR).
+        */
+        for (std::size_t i = Len * 8u; i < N; i++) {
+            alpha[i] = 1;
+        }
+
+        /* Run decoding stages. */
+        std::array<uint8_t, K / 8u> out = decode_stages(alpha);
+
+        return out;
     }
 };
 
