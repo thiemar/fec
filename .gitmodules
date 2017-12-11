@@ -1,0 +1,3 @@
+[submodule "support/MATLAB/mex/libcorrect"]
+	path = support/MATLAB/mex/libcorrect
+	url = https://github.com/quiet/libcorrect.git

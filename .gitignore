@@ -56,3 +56,7 @@ src/*.gz
 Makefile
 test/src/googletest*
 tmp
+
+*.mexmaci64
+*.mexw64
+

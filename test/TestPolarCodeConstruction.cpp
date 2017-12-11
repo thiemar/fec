@@ -9,7 +9,7 @@ constexpr std::array<T, sizeof...(I)> expand_sequence(std::integer_sequence<T, I
 
 TEST(PolarCodeConstructionTest, CalculateBhattacharyyaBounds) {
     /*
-    Calculated using support/polar/polar_consruction.m – note that they are
+    Calculated using support/MATLAB/polar/polar_consruction.m – note that they are
     one-based.
     */
     std::array<std::size_t, 512> ref_indices = {

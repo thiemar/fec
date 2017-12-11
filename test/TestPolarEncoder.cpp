@@ -19,7 +19,7 @@ TEST(PolarEncoderTest, EncodeBlockSize1024) {
          27, 246,   1, 198, 209, 222,  21, 102
     };
 
-    /* Calculated using support/polar/encode_test.m */
+    /* Calculated using support/MATLAB/polar/encode_test.m */
     std::array<uint8_t, N / 8u> ref_out = {
         203, 210, 132, 113, 203, 179,  90, 251,
          68, 235,  77, 189, 213, 228,  77, 155,
@@ -63,7 +63,7 @@ TEST(PolarEncoderTest, EncodeBlockSize1024_Shortened) {
          27, 246,   1, 198, 209, 222,  21, 102
     };
 
-    /* Calculated using support/polar/encode_test.m */
+    /* Calculated using support/MATLAB/polar/encode_test.m */
     std::array<uint8_t, N / 8u> ref_out = {
         203, 210, 132, 113, 203, 179,  90, 251,
          68, 235,  77, 189, 213, 228,  77, 155,
