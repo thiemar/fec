@@ -29,7 +29,7 @@ for i = 1:numel(Eb_N0)
         if fec_test_params.test_rs_viterbi
             data = uint8(randi([0 255], fec_test_params.rs_viterbi_message_data_length, 1));
             encoded = encode_rs_viterbi(data);
-            channel_output = double(reshape(de2bi(encoded, 'left-msb')', [], 1))*2 - 1;
+            channel_output = double(reshape(de2bi(encoded, 8, 'left-msb')', [], 1))*2 - 1;
             
             channel_output_noisy = channel_output + randn(size(channel_output)) / ...
                 sqrt(2*(10^(Eb_N0(i)/10)));
@@ -49,7 +49,7 @@ for i = 1:numel(Eb_N0)
         if fec_test_params.test_polar
             data = uint8(randi([0 255], fec_test_params.polar_data_size / 8, 1));
             encoded = encode_polar(data);
-            channel_output = double(reshape(de2bi(encoded, 'left-msb')', [], 1))*2 - 1;
+            channel_output = double(reshape(de2bi(encoded, 8, 'left-msb')', [], 1))*2 - 1;
 
             channel_output_noisy = channel_output + randn(size(channel_output)) / ...
                 sqrt(2*(10^(Eb_N0(i)/10)));

@@ -26,6 +26,7 @@ SOFTWARE.
 #include <cstddef>
 #include <cstring>
 #include <type_traits>
+#include <tuple>
 #include <utility>
 
 #include "FEC/Types.h"
@@ -101,15 +102,20 @@ namespace Detail {
     value. Only the first r bits which are equal to the pivot value are
     counted; the rest are ignored.
     */
-    template <int32_t... Bs>
-    constexpr std::size_t get_nth_index_below_pivot(std::size_t n, std::size_t r, int32_t pivot,
-            std::integer_sequence<int32_t, Bs...>) {
+    template <std::size_t... Is, int32_t... Bs>
+    constexpr Detail::ConstantArray<std::size_t, sizeof...(Is)> get_n_indices_below_pivot_impl(std::size_t r, int32_t pivot,
+            std::index_sequence<Is...>, std::integer_sequence<int32_t, Bs...>) {
+        Detail::ConstantArray<std::size_t, sizeof...(Is)> out = {};
         std::size_t idx = 0u;
         std::size_t count = 0u;
         std::size_t residual = r;
         for (int32_t i : { Bs... }) {
-            if ((i < pivot || (residual && i == pivot)) && count++ == n) {
-                return idx;
+            if (i < pivot || (residual && i == pivot)) {
+                out[count++] = idx;
+            }
+            
+            if (count == sizeof...(Is)) {
+                break;
             }
 
             if (residual && i == pivot) {
@@ -119,16 +125,19 @@ namespace Detail {
             idx++;
         }
 
-        return idx;
+        return out;
+    }
+    
+    template <std::size_t R, int32_t Pivot, std::size_t... Is, int32_t... Bs>
+    constexpr auto get_n_indices_below_pivot(std::index_sequence<Is...>, std::integer_sequence<int32_t, Bs...>) {
+        constexpr Detail::ConstantArray<std::size_t, sizeof...(Is)> indices = get_n_indices_below_pivot_impl(R, Pivot,
+            std::index_sequence<Is...>{}, std::integer_sequence<int32_t, Bs...>{});
+        return std::index_sequence<indices[Is]...>{};
     }
 
-    template <std::size_t K, int32_t Pivot, typename DataIdxSeq, typename ValSeq>
-    struct DataBitsIndexSequenceHelper;
-
-    template <std::size_t K, int32_t Pivot, std::size_t... Fs, typename ValSeq>
-    struct DataBitsIndexSequenceHelper<K, Pivot, std::index_sequence<Fs...>, ValSeq> {
-        using index_sequence = std::index_sequence<get_nth_index_below_pivot(Fs,
-            K - get_num_below_pivot(Pivot, ValSeq{}), Pivot, ValSeq{})...>;
+    template <std::size_t K, int32_t Pivot, typename IdxSeq, typename ValSeq>
+    struct DataBitsIndexSequenceHelper {
+        using index_sequence = decltype(get_n_indices_below_pivot<K - get_num_below_pivot(Pivot, ValSeq{}), Pivot>(IdxSeq{}, ValSeq{}));
     };
 
     /*
