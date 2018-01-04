@@ -4,9 +4,10 @@
 % - 'log'
 % - 'piecewise'
 % - 'piecewise_integer'
-function [frozen, z, I] = polar_construction(N, K, method, design_snr)
+function [frozen, z, I] = polar_construction(N, K, M, method, design_snr)
     assert(log2(N) == round(log2(N)), 'N must be a power of two');
     assert(K <= N, 'k must be smaller than or equal to N');
+    assert(M <= N && M >= K, 'M must be between N and K');
     
     if nargin < 4
         design_snr = 0;
@@ -105,6 +106,11 @@ function [frozen, z, I] = polar_construction(N, K, method, design_snr)
         error('Unrecognised construction method');
     end
     
+    % Work out shortening.
+    shortened = (M+1):N;
+    [~, ia, ~] = intersect(I, shortened);
+    I(ia) = [];
+    
     frozen = false(N, 1);
-    frozen(I(K+1:end)) = true;
+    frozen([I(K+1:end); shortened']) = true;
 end

@@ -383,10 +383,49 @@ class SuccessiveCancellationListDecoder<N, K, std::index_sequence<Ds...>, L> {
     static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
     static_assert(L >= 1u, "List length must be at least one");
 
-    /* Decode the whole buffer in blocks of bool_vec_t. */
-    template <std::size_t S>
-    static std::array<uint8_t, K / 8u> decode_stages(std::array<int8_t, N> alpha) {
-        std::array<uint8_t, K / 8u> out = {};
+    /* Decode the whole buffer in log2(N) stages. */
+    template <std::size_t S, std::size_t I>
+    static std::array<uint8_t, (std::size_t)1u << S> decode_stages(std::array<int8_t, (std::size_t)1u << S> alpha,
+            std::array<int8_t, K / 8u> decoded) {
+
+        /* Left-traversal. */
+        std::array<uint8_t, ((std::size_t)1u << (S - 1u))> beta_l = decode_stages<S - 1u, I>(alpha, decoded);
+
+        /* Right-traversal. */
+        std::array<uint8_t, ((std::size_t)1u << (S - 1u))> beta_r =
+            decode_stages<S - 1u, I + ((std::size_t)1u << (S - 1u))>(alpha, decoded);
+
+        std::array<uint8_t, (std::size_t)1u << S> beta;
+
+        // for (std::size_t i = 0u; i < ; i++) {
+
+        // }
+
+        return beta;
+    }
+
+    /*
+    Special case for leaf nodes, where the systematic codeword is estimated.
+    */
+
+    /* Do the f-operation (min-sum). */
+    template <std::size_t M>
+    static std::array<int8_t, M / 2u> f_op(std::array<int8_t, M> in) {
+        std::array<int8_t, M / 2u> out;
+        for (std::size_t i = 0u; i < M / 2u; i++) {
+            // out[i] = ;
+        }
+
+        return out;
+    }
+
+    /* Do the g-operation. */
+    template <std::size_t M>
+    static std::array<int8_t, M / 2u> g_op(std::array<int8_t, M> in) {
+        std::array<int8_t, M / 2u> out;
+        for (std::size_t i = 0u; i < M / 2u; i++) {
+            // out[i] = ;
+        }
 
         return out;
     }
@@ -415,7 +454,8 @@ public:
         }
 
         /* Run decoding stages. */
-        std::array<uint8_t, K / 8u> out = decode_stages(alpha);
+        std::array<uint8_t, K / 8u> out = {};
+        decode_stages<Detail::log2(N), 0u>(alpha, out);
 
         return out;
     }
