@@ -31,8 +31,8 @@ using ConvolutionalDecoder = Thiemar::Convolutional::PuncturedHardDecisionViterb
     Thiemar::BinarySequence<1, 0, 0, 1, 1, 1, 1>
 >;
 
-using PolarDataIndices = Thiemar::Polar::PolarCodeConstructor<POLAR_BLOCK_SIZE, POLAR_DATA_SIZE>::data_index_sequence;
-using PolarEncoder = Thiemar::Polar::PolarEncoder<POLAR_BLOCK_SIZE, POLAR_DATA_SIZE, PolarDataIndices>;
+using PolarDataIndices = Thiemar::Polar::PolarCodeConstructor<POLAR_BLOCK_SIZE, POLAR_BLOCK_SIZE_SHORTENED, POLAR_DATA_SIZE>::data_index_sequence;
+using PolarEncoder = Thiemar::Polar::PolarEncoder<POLAR_BLOCK_SIZE, POLAR_BLOCK_SIZE_SHORTENED, POLAR_DATA_SIZE, PolarDataIndices>;
 
 void rs_encode(const uint8_t *data, uint8_t *buf) {
     uint8_t temp[MESSAGE_DATA_LENGTH+MESSAGE_PARITY_LENGTH] = {};
@@ -59,6 +59,6 @@ void conv_decode(const uint8_t *data, size_t len, uint8_t *buf) {
 }
 
 void polar_encode(const uint8_t *data, uint8_t *buf) {
-    auto out = PolarEncoder::encode<POLAR_BLOCK_SIZE_SHORTENED / 8u>(data);
+    auto out = PolarEncoder::encode(data);
     memcpy(buf, out.data(), out.size());
 }

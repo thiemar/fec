@@ -188,7 +188,7 @@ corresponding to values in the range [L, U).
 */
 template <typename T, T... Is>
 constexpr std::pair<std::size_t, std::size_t> get_range_extents(T L, T U, std::integer_sequence<T, Is...>) {
-    std::size_t start = 0u;
+    std::size_t start = sizeof...(Is);
     std::size_t end = sizeof...(Is);
 
     bool got_start = false;

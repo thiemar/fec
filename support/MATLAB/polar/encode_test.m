@@ -1,4 +1,5 @@
 N = 1024;
+M = 520;
 K = 512;
 design_snr = 5;
 
@@ -13,7 +14,7 @@ test_data = uint8([...
      27, 246,   1, 198, 209, 222,  21, 102 ...
 ]);
 test_bitsequence = reshape(de2bi(test_data, 'left-msb')', [], 1);
-frozen = polar_construction(N, K, 'piecewise_integer', design_snr);
+frozen = polar_construction(N, K, M, 'piecewise_integer', design_snr);
 
 test_bitsequence_encoded = polar_encode(N, K, test_bitsequence, frozen);
 

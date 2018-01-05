@@ -42,13 +42,19 @@ namespace Detail {
 
     /*
     This function finds the smallest value of an integer sequence below which
-    there are no fewer than K elements.
+    there are no fewer than K elements. Only the first m elements of the
+    sequence are taken into account, to support shortened codes.
     */
     template <int32_t... Bs>
-    constexpr int32_t get_pivot_value(std::size_t k, int32_t pivot, int32_t max, int32_t min,
+    constexpr int32_t get_pivot_value(std::size_t m, std::size_t k, int32_t pivot, int32_t max, int32_t min,
             std::integer_sequence<int32_t, Bs...>) {
         std::size_t sum = 0u;
+        std::size_t idx = 0u;
         for (int32_t i : { Bs... }) {
+            if (idx++ == m) {
+                break;
+            }
+
             if (i <= pivot) {
                 sum++;
             }
@@ -68,15 +74,15 @@ namespace Detail {
         if (next_pivot == pivot) {
             return pivot;
         } else {
-            return get_pivot_value(k, next_pivot, next_max, next_min,
+            return get_pivot_value(m, k, next_pivot, next_max, next_min,
                 std::integer_sequence<int32_t, Bs...>{});
         }
     }
 
     template <int32_t... Bs>
-    constexpr int32_t get_pivot_value(std::size_t k, std::integer_sequence<int32_t, Bs...>) {
+    constexpr int32_t get_pivot_value(std::size_t m, std::size_t k, std::integer_sequence<int32_t, Bs...>) {
         auto b_array = std::array<int32_t, sizeof...(Bs)>{ Bs... };
-        return get_pivot_value(k, (std::get<0u>(b_array) + std::get<sizeof...(Bs) - 1u>(b_array)) / 2,
+        return get_pivot_value(m, k, (std::get<0u>(b_array) + std::get<sizeof...(Bs) - 1u>(b_array)) / 2,
             std::get<0u>(b_array), std::get<sizeof...(Bs) - 1u>(b_array), std::integer_sequence<int32_t, Bs...>{});
     }
 
@@ -84,11 +90,19 @@ namespace Detail {
     This function return the number of values in Bs which are below the pivot
     value. Used to ensure that only the excess indices with marginal
     B-parameters are frozen, rather than the ones at the end of the sequence.
+
+    Only the first m elements of the sequence are taken into account, to
+    support shortened codes.
     */
     template <int32_t... Bs>
-    constexpr std::size_t get_num_below_pivot(int32_t pivot, std::integer_sequence<int32_t, Bs...>) {
+    constexpr std::size_t get_num_below_pivot(std::size_t m, int32_t pivot, std::integer_sequence<int32_t, Bs...>) {
         std::size_t count = 0u;
+        std::size_t idx = 0u;
         for (int32_t i : { Bs... }) {
+            if (idx++ == m) {
+                break;
+            }
+
             if (i < pivot) {
                 count++;
             }
@@ -102,10 +116,10 @@ namespace Detail {
     value. Only the first r bits which are equal to the pivot value are
     counted; the rest are ignored.
     */
-    template <std::size_t... Is, int32_t... Bs>
-    constexpr Detail::ConstantArray<std::size_t, sizeof...(Is)> get_n_indices_below_pivot_impl(std::size_t r, int32_t pivot,
-            std::index_sequence<Is...>, std::integer_sequence<int32_t, Bs...>) {
-        Detail::ConstantArray<std::size_t, sizeof...(Is)> out = {};
+    template <std::size_t N, int32_t... Bs>
+    constexpr Detail::ConstantArray<std::size_t, N> get_n_indices_below_pivot_impl(std::size_t r, int32_t pivot,
+            std::integer_sequence<int32_t, Bs...>) {
+        Detail::ConstantArray<std::size_t, N> out = {};
         std::size_t idx = 0u;
         std::size_t count = 0u;
         std::size_t residual = r;
@@ -114,7 +128,7 @@ namespace Detail {
                 out[count++] = idx;
             }
             
-            if (count == sizeof...(Is)) {
+            if (count == N) {
                 break;
             }
 
@@ -130,14 +144,14 @@ namespace Detail {
     
     template <std::size_t R, int32_t Pivot, std::size_t... Is, int32_t... Bs>
     constexpr auto get_n_indices_below_pivot(std::index_sequence<Is...>, std::integer_sequence<int32_t, Bs...>) {
-        constexpr Detail::ConstantArray<std::size_t, sizeof...(Is)> indices = get_n_indices_below_pivot_impl(R, Pivot,
-            std::index_sequence<Is...>{}, std::integer_sequence<int32_t, Bs...>{});
+        constexpr Detail::ConstantArray<std::size_t, sizeof...(Is)> indices = get_n_indices_below_pivot_impl<sizeof...(Is)>(R, Pivot,
+            std::integer_sequence<int32_t, Bs...>{});
         return std::index_sequence<indices[Is]...>{};
     }
 
-    template <std::size_t K, int32_t Pivot, typename IdxSeq, typename ValSeq>
+    template <std::size_t M, std::size_t K, int32_t Pivot, typename IdxSeq, typename ValSeq>
     struct DataBitsIndexSequenceHelper {
-        using index_sequence = decltype(get_n_indices_below_pivot<K - get_num_below_pivot(Pivot, ValSeq{}), Pivot>(IdxSeq{}, ValSeq{}));
+        using index_sequence = decltype(get_n_indices_below_pivot<K - get_num_below_pivot(M, Pivot, ValSeq{}), Pivot>(IdxSeq{}, ValSeq{}));
     };
 
     /*
@@ -223,12 +237,17 @@ the number of template parameters, recursion depth and constexpr depth
 needed for the chosen block size. This may require adjusting compiler
 options (such as the -ftemplate-depth and -fconstexpr-depth options in GCC
 and Clang).
+
+The algorithm also supports shortened codes, in which case the M parameter
+represents the number of bits after shortening.
 */
-template <std::size_t N, std::size_t K, int SNR = -2>
+template <std::size_t N, std::size_t M, std::size_t K, int SNR = -2>
 class PolarCodeConstructor {
     static_assert(N >= 8u && Detail::calculate_hamming_weight(N) == 1u, "Block size must be a power of two and a multiple of 8");
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
+    static_assert(M % 8u == 0u, "Number of shortened bits must be a multiple of 8");
+    static_assert(M <= N && M >= K, "Number of information bits must be between number of information bits and block size");
 
     using b_param_sequence = typename Detail::BhattacharyyaBoundSequence<Detail::log2(N), SNR>::b_param_sequence;
 
@@ -238,7 +257,7 @@ public:
     bits in sorted order.
     */
     using data_index_sequence = typename Detail::DataBitsIndexSequenceHelper<
-        K, Detail::get_pivot_value(K, b_param_sequence{}), std::make_index_sequence<K>, b_param_sequence>::index_sequence;
+        M, K, Detail::get_pivot_value(M, K, b_param_sequence{}), std::make_index_sequence<K>, b_param_sequence>::index_sequence;
 };
 
 /*
@@ -254,15 +273,17 @@ The implementation here is largely derived from the following papers:
 [2] https://arxiv.org/pdf/1504.00353.pdf
 [3] https://arxiv.org/pdf/1604.08104.pdf
 */
-template <std::size_t N, std::size_t K, typename DataIndices>
+template <std::size_t N, std::size_t M, std::size_t K, typename DataIndices>
 class PolarEncoder;
 
-template <std::size_t N, std::size_t K, std::size_t... Ds>
-class PolarEncoder<N, K, std::index_sequence<Ds...>> {
+template <std::size_t N, std::size_t M, std::size_t K, std::size_t... Ds>
+class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
     static_assert(N >= sizeof(bool_vec_t) * 8u && Detail::calculate_hamming_weight(N) == 1u,
         "Block size must be a power of two and a multiple of the machine word size");
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
+    static_assert(M % 8u == 0u, "Number of shortened bits must be a multiple of 8");
+    static_assert(M <= N && M >= K, "Number of information bits must be between number of information bits and block size");
     static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
 
     /* Encode the whole buffer in blocks of bool_vec_t. */
@@ -319,37 +340,34 @@ class PolarEncoder<N, K, std::index_sequence<Ds...>> {
     /*
     For the given data index, return the corresponding generator matrix row.
     */
-    template <std::size_t M = sizeof(bool_vec_t) * 8u>
-    constexpr static typename std::enable_if_t<(M > 1u), bool_vec_t> calculate_row(std::size_t r) {
-        static_assert(M <= sizeof(bool_vec_t) * 8u, "Can only calculate blocks up to the size of booL_vec_t");
+    template <std::size_t I = sizeof(bool_vec_t) * 8u>
+    constexpr static typename std::enable_if_t<(I > 1u), bool_vec_t> calculate_row(std::size_t r) {
+        static_assert(I <= sizeof(bool_vec_t) * 8u, "Can only calculate blocks up to the size of booL_vec_t");
 
-        if (r >= M / 2u) {
-            return calculate_row<M / 2u>(r % (M / 2u)) | calculate_row<M / 2u>(r % (M / 2u)) >> (M / 2u);
+        if (r >= I / 2u) {
+            return calculate_row<I / 2u>(r % (I / 2u)) | calculate_row<I / 2u>(r % (I / 2u)) >> (I / 2u);
         } else {
-            return calculate_row<M / 2u>(r % (M / 2u));
+            return calculate_row<I / 2u>(r % (I / 2u));
         }
     }
 
-    template <std::size_t M>
-    constexpr static typename std::enable_if_t<(M == 1u), bool_vec_t> calculate_row(std::size_t r) {
+    template <std::size_t I>
+    constexpr static typename std::enable_if_t<(I == 1u), bool_vec_t> calculate_row(std::size_t r) {
         return (bool_vec_t)1u << (sizeof(bool_vec_t) * 8u - 1u);
     }
 
 public:
     /*
-    Encode a full block. Input buffer must be of size K/8, and output
-    buffer must be of size 'Len' bytes.
+    Encode a full block. Input buffer must be of size K/8 bytes, and output
+    buffer must be of size M/8 bytes.
     */
-    template <std::size_t Len = N / 8u>
-    static std::array<uint8_t, Len> encode(const uint8_t *in) {
-        static_assert(Len * 8u <= N, "Output length must be smaller than or equal to block size");
-
+    static std::array<uint8_t, M / 8u> encode(const uint8_t *in) {
         /* Run encoding stages. */
-        auto buf_expanded = encode_stages(in, std::make_index_sequence<N / (sizeof(bool_vec_t) * 8u)>{});
+        auto buf_encoded = encode_stages(in, std::make_index_sequence<N / (sizeof(bool_vec_t) * 8u)>{});
 
-        std::array<uint8_t, Len> out;
-        for (std::size_t i = 0u; i < Len; i++) {
-            out[i] = buf_expanded[i / sizeof(bool_vec_t)] >> ((sizeof(bool_vec_t)-1u - (i % sizeof(bool_vec_t))) * 8u);
+        std::array<uint8_t, M / 8u> out;
+        for (std::size_t i = 0u; i < M / 8u; i++) {
+            out[i] = buf_encoded[i / sizeof(bool_vec_t)] >> ((sizeof(bool_vec_t)-1u - (i % sizeof(bool_vec_t))) * 8u);
         }
 
         return out;
@@ -372,14 +390,16 @@ The algorithm used is the f-SSCL algorithm (fast simplified successive
 cancellation list) described in the following papers:
 [1] https://arxiv.org/pdf/1701.08126.pdf
 */
-template <std::size_t N, std::size_t K, typename DataIndices, std::size_t L = 1u>
+template <std::size_t N, std::size_t M, std::size_t K, typename DataIndices, std::size_t L = 1u>
 class SuccessiveCancellationListDecoder;
 
-template <std::size_t N, std::size_t K, std::size_t... Ds, std::size_t L>
-class SuccessiveCancellationListDecoder<N, K, std::index_sequence<Ds...>, L> {
+template <std::size_t N, std::size_t M, std::size_t K, std::size_t... Ds, std::size_t L>
+class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> {
     static_assert(N >= 8u && Detail::calculate_hamming_weight(N) == 1u, "Block size must be a power of two and a multiple of 8");
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
+    static_assert(M % 8u == 0u, "Number of shortened bits must be a multiple of 8");
+    static_assert(M <= N && M >= K, "Number of information bits must be between number of information bits and block size");
     static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
     static_assert(L >= 1u, "List length must be at least one");
 
@@ -409,10 +429,10 @@ class SuccessiveCancellationListDecoder<N, K, std::index_sequence<Ds...>, L> {
     */
 
     /* Do the f-operation (min-sum). */
-    template <std::size_t M>
-    static std::array<int8_t, M / 2u> f_op(std::array<int8_t, M> in) {
-        std::array<int8_t, M / 2u> out;
-        for (std::size_t i = 0u; i < M / 2u; i++) {
+    template <std::size_t I>
+    static std::array<int8_t, I / 2u> f_op(std::array<int8_t, I> in) {
+        std::array<int8_t, I / 2u> out;
+        for (std::size_t i = 0u; i < I / 2u; i++) {
             // out[i] = ;
         }
 
@@ -420,10 +440,10 @@ class SuccessiveCancellationListDecoder<N, K, std::index_sequence<Ds...>, L> {
     }
 
     /* Do the g-operation. */
-    template <std::size_t M>
-    static std::array<int8_t, M / 2u> g_op(std::array<int8_t, M> in) {
-        std::array<int8_t, M / 2u> out;
-        for (std::size_t i = 0u; i < M / 2u; i++) {
+    template <std::size_t I>
+    static std::array<int8_t, I / 2u> g_op(std::array<int8_t, I> in) {
+        std::array<int8_t, I / 2u> out;
+        for (std::size_t i = 0u; i < I / 2u; i++) {
             // out[i] = ;
         }
 
