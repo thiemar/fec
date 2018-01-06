@@ -9,13 +9,14 @@ addpath('mex');
 rng(123);
 
 % BPSK AWGN channel simulation.
-Eb_N0 = 0:0.5:4;
+Eb_N0 = 0:0.5:2;
 
 if fec_test_params.test_polar
     addpath('polar');
     FER_polar = zeros(size(Eb_N0));
     frozen = polar_construction(fec_test_params.polar_block_size, ...
-        fec_test_params.polar_data_size, 'piecewise_integer', 5);
+        fec_test_params.polar_data_size, fec_test_params.polar_block_size_shortened, ...
+        'piecewise_integer', 5);
 end
 
 if fec_test_params.test_rs_viterbi

@@ -10,7 +10,7 @@ rng(123);
 
 % BPSK AWGN channel simulation.
 sims = 100;
-Eb_N0 = 0:0.5:3;
+Eb_N0 = 0:0.5:4;
 FER_coded = zeros(size(Eb_N0));
 for i = 1:numel(Eb_N0)
     fprintf('Simulating Eb_N0 = %f dB\n', Eb_N0(i));
