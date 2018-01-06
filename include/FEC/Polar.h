@@ -41,55 +41,10 @@ namespace Detail {
     */
 
     /*
-    This function finds the smallest value of an integer sequence below which
-    there are no fewer than K elements. Only the first m elements of the
-    sequence are taken into account, to support shortened codes.
-    */
-    template <int32_t... Bs>
-    constexpr int32_t get_pivot_value(std::size_t m, std::size_t k, int32_t pivot, int32_t max, int32_t min,
-            std::integer_sequence<int32_t, Bs...>) {
-        std::size_t sum = 0u;
-        std::size_t idx = 0u;
-        for (int32_t i : { Bs... }) {
-            if (idx++ == m) {
-                break;
-            }
-
-            if (i <= pivot) {
-                sum++;
-            }
-        }
-
-        int32_t next_pivot = pivot;
-        int32_t next_max = max;
-        int32_t next_min = min;
-        if (sum > k) {
-            next_pivot = (pivot + min) / 2;
-            next_max = pivot;
-        } else if(sum < k) {
-            next_pivot = (max + pivot) / 2;
-            next_min = pivot;
-        }
-
-        if (next_pivot == pivot) {
-            return pivot;
-        } else {
-            return get_pivot_value(m, k, next_pivot, next_max, next_min,
-                std::integer_sequence<int32_t, Bs...>{});
-        }
-    }
-
-    template <int32_t... Bs>
-    constexpr int32_t get_pivot_value(std::size_t m, std::size_t k, std::integer_sequence<int32_t, Bs...>) {
-        auto b_array = std::array<int32_t, sizeof...(Bs)>{ Bs... };
-        return get_pivot_value(m, k, (std::get<0u>(b_array) + std::get<sizeof...(Bs) - 1u>(b_array)) / 2,
-            std::get<0u>(b_array), std::get<sizeof...(Bs) - 1u>(b_array), std::integer_sequence<int32_t, Bs...>{});
-    }
-
-    /*
-    This function return the number of values in Bs which are below the pivot
-    value. Used to ensure that only the excess indices with marginal
-    B-parameters are frozen, rather than the ones at the end of the sequence.
+    This function return the number of values in Bs which are smaller than or
+    equal to the pivot value. Used to ensure that only the excess indices
+    with marginal B-parameters are frozen, rather than the ones at the end of
+    the sequence.
 
     Only the first m elements of the sequence are taken into account, to
     support shortened codes.
@@ -103,12 +58,56 @@ namespace Detail {
                 break;
             }
 
-            if (i < pivot) {
+            if (i <= pivot) {
                 count++;
             }
         }
 
         return count;
+    }
+
+    /*
+    This function finds the smallest value of an integer sequence below which
+    there are no fewer than K elements. Only the first m elements of the
+    sequence are taken into account, to support shortened codes.
+    */
+    template <int32_t... Bs>
+    constexpr int32_t get_pivot_value(std::size_t m, std::size_t k, int32_t pivot, int32_t max, int32_t min,
+            std::integer_sequence<int32_t, Bs...>) {
+        std::size_t count = get_num_below_pivot(m, pivot, std::integer_sequence<int32_t, Bs...>{});
+
+        int32_t next_pivot = pivot;
+        int32_t next_max = max;
+        int32_t next_min = min;
+        if (count > k) {
+            next_pivot = (pivot + min) / 2;
+            next_max = pivot + 1;
+        } else if (count < k) {
+            next_pivot = (max + pivot) / 2;
+            next_min = pivot + 1;
+        }
+
+        /*
+        This ensures that the largest pivot which satisfies the criteria is
+        found, by 'walking' the pivot upwards for the last few steps.
+        */
+        if (next_max - next_min <= 2) {
+            next_pivot = next_min;
+        }
+
+        if (next_pivot == pivot) {
+            return pivot;
+        } else {
+            return get_pivot_value(m, k, next_pivot, next_max, next_min,
+                std::integer_sequence<int32_t, Bs...>{});
+        }
+    }
+
+    template <int32_t... Bs>
+    constexpr int32_t get_pivot_value(std::size_t m, std::size_t k, std::integer_sequence<int32_t, Bs...>) {
+        constexpr auto b_array = std::array<int32_t, sizeof...(Bs)>{ Bs... };
+        return get_pivot_value(m, k, (b_array[0u] + b_array[sizeof...(Bs) - 1u]) / 2,
+            b_array[0u] + 1, b_array[sizeof...(Bs) - 1u], std::integer_sequence<int32_t, Bs...>{});
     }
 
     /*
@@ -151,7 +150,8 @@ namespace Detail {
 
     template <std::size_t M, std::size_t K, int32_t Pivot, typename IdxSeq, typename ValSeq>
     struct DataBitsIndexSequenceHelper {
-        using index_sequence = decltype(get_n_indices_below_pivot<K - get_num_below_pivot(M, Pivot, ValSeq{}), Pivot>(IdxSeq{}, ValSeq{}));
+        using index_sequence = decltype(
+            get_n_indices_below_pivot<K - get_num_below_pivot(M, Pivot-1u, ValSeq{}), Pivot>(IdxSeq{}, ValSeq{}));
     };
 
     /*
