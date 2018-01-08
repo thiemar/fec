@@ -3,13 +3,8 @@ PROJECT(fec)
 INCLUDE(ExternalProject)
 INCLUDE(CheckCXXCompilerFlag)
 
-# Check for C++14 support.
-CHECK_CXX_COMPILER_FLAG("-std=c++14" COMPILER_SUPPORTS_CXX14)
-IF(COMPILER_SUPPORTS_CXX14)
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
-ELSE()
-    MESSAGE(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++14 support. Please use a different C++ compiler.")
-ENDIF()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-shift-count-overflow -Wno-missing-braces")
 
