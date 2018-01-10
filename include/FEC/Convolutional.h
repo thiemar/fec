@@ -145,12 +145,11 @@ class PuncturedConvolutionalEncoder {
 
     /* For the given polynomial, carry out an XOR if this bit is set. */
     template <std::size_t Shift, typename Poly, std::size_t PolyIndex>
-    static typename std::enable_if_t<Poly::template test<Shift>(), void> calculate_taps(bool_vec_t in, bool_vec_t *out) {
-        out[PolyIndex] ^= in;
+    static void calculate_taps(bool_vec_t in, bool_vec_t *out) {
+        if constexpr (Poly::template test<Shift>()) {
+            out[PolyIndex] ^= in;
+        }
     }
-
-    template <std::size_t Shift, typename Poly, std::size_t PolyIndex>
-    static typename std::enable_if_t<!Poly::template test<Shift>(), void> calculate_taps(bool_vec_t in, bool_vec_t *out) {}
 
     /*
     Efficiently encode a block of bytes. The 'in' buffer should point to a
@@ -166,8 +165,8 @@ class PuncturedConvolutionalEncoder {
         constexpr std::size_t n_conv = block_size() / sizeof(bool_vec_t) + ((block_size() % sizeof(bool_vec_t)) ? 1u : 0u);
 
         for (std::size_t i = 0u; i < n_conv; i++) {
-            process_data(&in[i*sizeof(bool_vec_t)],
-                &conv_vec[i*sizeof...(Polynomials)], std::make_index_sequence<ConstraintLength>{});
+            process_data(&in[i*sizeof(bool_vec_t)], &conv_vec[i*sizeof...(Polynomials)],
+                std::make_index_sequence<ConstraintLength>{});
         }
 
         interleaver::interleave(conv_vec, out);

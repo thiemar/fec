@@ -95,47 +95,9 @@ namespace Detail {
     on the puncturing matrix.
     */
 
-    /* Need these forward declarations. */
-    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
-    (ShiftIndex > 1u), bool_vec_t> spread_word(
-            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>);
-
-    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<!index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
-    (ShiftIndex > 1u), bool_vec_t> spread_word(
-            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>);
-
     /* This is the final shift/mask operation. */
     template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<ShiftIndex == 1u, bool_vec_t> spread_word(
-            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>) {
-        /*
-        Add ShiftIndex to the InputIndices which correspond to DiffIndices
-        greater than or equal to ShiftIndex.
-        */
-        constexpr bool_vec_t mask_shift = mask_from_index_sequence(
-            std::index_sequence<DiffIndices & ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
-        constexpr bool_vec_t mask_static = mask_from_index_sequence(
-            std::index_sequence<DiffIndices < ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
-
-        return (in & mask_static) | (in & mask_shift) >> ShiftIndex;
-    }
-
-    /*
-    Skip if none of the DiffIndices are greater than or equal to ShiftIndex.
-    */
-    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
-    (ShiftIndex > 1u), bool_vec_t> spread_word(
-            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>) {
-        return spread_word<ShiftIndex / 2u>(in, std::index_sequence<InputIndices...>{}, std::index_sequence<DiffIndices...>{});
-    }
-
-    template <std::size_t ShiftIndex, std::size_t... InputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<!index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
-    (ShiftIndex > 1u), bool_vec_t> spread_word(
-            bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>) {
+    bool_vec_t spread_word(bool_vec_t in, std::index_sequence<InputIndices...>, std::index_sequence<DiffIndices...>) {
         /*
         Add ShiftIndex to the InputIndices which correspond to DiffIndices
         greater than or equal to ShiftIndex.
@@ -154,12 +116,22 @@ namespace Detail {
         constexpr bool_vec_t mask_static = mask_from_index_sequence(
             std::index_sequence<DiffIndices < ShiftIndex ? InputIndices : sizeof(bool_vec_t)*8u ...>{});
 
-        /*
-        Create the mask from InputIndices and apply it after the shift
-        operation.
-        */
-        return spread_word<ShiftIndex / 2u>((in & mask_static) | (in & mask_shift) >> ShiftIndex,
-            new_input_sequence{}, new_diff_sequence{});
+        if constexpr (ShiftIndex == 1u) {
+            return (in & mask_static) | (in & mask_shift) >> ShiftIndex;
+        } else if constexpr (index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{})) {
+            /*
+            Skip if none of the DiffIndices are greater than or equal to
+            ShiftIndex.
+            */
+            return spread_word<ShiftIndex / 2u>(in, std::index_sequence<InputIndices...>{}, std::index_sequence<DiffIndices...>{});
+        } else {
+            /*
+            Create the mask from InputIndices and apply it after the shift
+            operation.
+            */
+            return spread_word<ShiftIndex / 2u>((in & mask_static) | (in & mask_shift) >> ShiftIndex,
+                new_input_sequence{}, new_diff_sequence{});
+        }
     }
 
     /*
@@ -167,47 +139,9 @@ namespace Detail {
     on the puncturing matrix.
     */
 
-    /* Need these forward declarations. */
-    template <std::size_t ShiftIndex, std::size_t... OutputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
-    (ShiftIndex < sizeof(bool_vec_t) * 8u / 2u), bool_vec_t> despread_word(
-            bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>);
-
-    template <std::size_t ShiftIndex, std::size_t... OutputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<!index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
-    (ShiftIndex < sizeof(bool_vec_t) * 8u / 2u), bool_vec_t> despread_word(
-            bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>);
-
     /* This is the final shift/mask operation. */
     template <std::size_t ShiftIndex, std::size_t... OutputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<ShiftIndex == sizeof(bool_vec_t) * 8u / 2u, bool_vec_t> despread_word(
-            bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>) {
-        /*
-        Add ShiftIndex to the OutputIndices which correspond to DiffIndices
-        greater than or equal to ShiftIndex.
-        */
-        constexpr bool_vec_t mask_shift = mask_from_index_sequence(
-            std::index_sequence<DiffIndices & ShiftIndex ? OutputIndices : sizeof(bool_vec_t)*8u ...>{});
-        constexpr bool_vec_t mask_static = mask_from_index_sequence(
-            std::index_sequence<!(DiffIndices & ShiftIndex) ? OutputIndices : sizeof(bool_vec_t)*8u ...>{});
-
-        return (in & mask_static) | (in & mask_shift) << ShiftIndex;
-    }
-
-    /*
-    Skip if none of the DiffIndices are greater than or equal to ShiftIndex.
-    */
-    template <std::size_t ShiftIndex, std::size_t... OutputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
-    (ShiftIndex < sizeof(bool_vec_t) * 8u / 2u), bool_vec_t> despread_word(
-            bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>) {
-        return despread_word<ShiftIndex * 2u>(in, std::index_sequence<OutputIndices...>{}, std::index_sequence<DiffIndices...>{});
-    }
-
-    template <std::size_t ShiftIndex, std::size_t... OutputIndices, std::size_t... DiffIndices>
-    typename std::enable_if_t<!index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{}) &&
-    (ShiftIndex < sizeof(bool_vec_t) * 8u / 2u), bool_vec_t> despread_word(
-            bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>) {
+    bool_vec_t despread_word(bool_vec_t in, std::index_sequence<OutputIndices...>, std::index_sequence<DiffIndices...>) {
         /*
         Add ShiftIndex to the OutputIndices which correspond to DiffIndices
         greater than or equal to ShiftIndex.
@@ -226,12 +160,22 @@ namespace Detail {
         constexpr bool_vec_t mask_static = mask_from_index_sequence(
             std::index_sequence<!(DiffIndices & ShiftIndex) ? OutputIndices : sizeof(bool_vec_t)*8u ...>{});
 
-        /*
-        Create the mask from OutputIndices and apply it after the shift
-        operation.
-        */
-        return despread_word<ShiftIndex * 2u>((in & mask_static) | (in & mask_shift) << ShiftIndex,
-            new_output_sequence{}, new_diff_sequence{});
+        if constexpr (ShiftIndex == sizeof(bool_vec_t) * 8u / 2u) {
+            return (in & mask_static) | (in & mask_shift) << ShiftIndex;
+        } else if constexpr (index_sequence_below_threshold(ShiftIndex, std::index_sequence<DiffIndices...>{})) {
+            /*
+            Skip if none of the DiffIndices are greater than or equal to
+            ShiftIndex.
+            */
+            return despread_word<ShiftIndex * 2u>(in, std::index_sequence<OutputIndices...>{}, std::index_sequence<DiffIndices...>{});
+        } else {
+            /*
+            Create the mask from OutputIndices and apply it after the shift
+            operation.
+            */
+            return despread_word<ShiftIndex * 2u>((in & mask_static) | (in & mask_shift) << ShiftIndex,
+                new_output_sequence{}, new_diff_sequence{});
+        }
     }
 }
 

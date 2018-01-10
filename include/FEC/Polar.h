@@ -341,19 +341,18 @@ class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
     For the given data index, return the corresponding generator matrix row.
     */
     template <std::size_t I = sizeof(bool_vec_t) * 8u>
-    constexpr static typename std::enable_if_t<(I > 1u), bool_vec_t> calculate_row(std::size_t r) {
-        static_assert(I <= sizeof(bool_vec_t) * 8u, "Can only calculate blocks up to the size of booL_vec_t");
+    constexpr static bool_vec_t calculate_row(std::size_t r) {
+        static_assert(I <= sizeof(bool_vec_t) * 8u, "Can only calculate blocks up to the size of bool_vec_t");
 
-        if (r >= I / 2u) {
-            return calculate_row<I / 2u>(r % (I / 2u)) | calculate_row<I / 2u>(r % (I / 2u)) >> (I / 2u);
+        if constexpr (I == 1u) {
+            return (bool_vec_t)1u << (sizeof(bool_vec_t) * 8u - 1u);
         } else {
-            return calculate_row<I / 2u>(r % (I / 2u));
+            if (r >= I / 2u) {
+                return calculate_row<I / 2u>(r % (I / 2u)) | calculate_row<I / 2u>(r % (I / 2u)) >> (I / 2u);
+            } else {
+                return calculate_row<I / 2u>(r % (I / 2u));
+            }
         }
-    }
-
-    template <std::size_t I>
-    constexpr static typename std::enable_if_t<(I == 1u), bool_vec_t> calculate_row(std::size_t r) {
-        return (bool_vec_t)1u << (sizeof(bool_vec_t) * 8u - 1u);
     }
 
 public:
