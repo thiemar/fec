@@ -116,9 +116,9 @@ namespace Detail {
     counted; the rest are ignored.
     */
     template <std::size_t N, int32_t... Bs>
-    constexpr Detail::ConstantArray<std::size_t, N> get_n_indices_below_pivot_impl(std::size_t r, int32_t pivot,
+    constexpr std::array<std::size_t, N> get_n_indices_below_pivot_impl(std::size_t r, int32_t pivot,
             std::integer_sequence<int32_t, Bs...>) {
-        Detail::ConstantArray<std::size_t, N> out = {};
+        std::array<std::size_t, N> out = {};
         std::size_t idx = 0u;
         std::size_t count = 0u;
         std::size_t residual = r;
@@ -143,7 +143,7 @@ namespace Detail {
     
     template <std::size_t R, int32_t Pivot, std::size_t... Is, int32_t... Bs>
     constexpr auto get_n_indices_below_pivot(std::index_sequence<Is...>, std::integer_sequence<int32_t, Bs...>) {
-        constexpr Detail::ConstantArray<std::size_t, sizeof...(Is)> indices = get_n_indices_below_pivot_impl<sizeof...(Is)>(R, Pivot,
+        constexpr std::array<std::size_t, sizeof...(Is)> indices = get_n_indices_below_pivot_impl<sizeof...(Is)>(R, Pivot,
             std::integer_sequence<int32_t, Bs...>{});
         return std::index_sequence<indices[Is]...>{};
     }

@@ -60,15 +60,6 @@ constexpr std::array<T, N> to_array(T *a) {
     return to_array_impl<T, N>(a, std::make_index_sequence<N>{});
 }
 
-/* Need an array class with constexpr access operators. */
-template <typename T, std::size_t N>
-struct ConstantArray {
-    T data[N];
-    constexpr T& operator[](std::size_t i) { return data[i]; }
-    constexpr const T& operator[](std::size_t i) const { return data[i]; }
-    constexpr std::array<T, N> to_std_array() { return to_array<T, N>((T*)data); }
-};
-
 /* Calculate Hamming weight of a word. */
 template <typename T>
 constexpr T calculate_hamming_weight(T in) {
@@ -128,7 +119,7 @@ constexpr bool_vec_t mask_from_index_sequence(std::index_sequence<MaskIndices...
 
 template <std::size_t N, std::size_t... MaskIndices>
 constexpr auto mask_buffer_from_index_sequence(std::index_sequence<MaskIndices...>) {
-    ConstantArray<uint8_t, N / 8u + (N % 8u)> mask = {};
+    std::array<uint8_t, N / 8u + (N % 8u)> mask = {};
     for (std::size_t i : { MaskIndices... }) {
         if (i == N) {
             continue;

@@ -74,13 +74,13 @@ class GaloisFieldImpl {
     template <std::size_t... I>
     static constexpr std::array<T, sizeof...(I)> get_field_elements_inverse(std::index_sequence<I...>) {
         constexpr std::array<T, sizeof...(I)> temp_antilog = get_field_elements(std::make_index_sequence<1u << M>{});
-        Detail::ConstantArray<T, sizeof...(I)> temp = {};
+        std::array<T, sizeof...(I)> temp = {};
 
         for (std::size_t i = 0u; i < sizeof...(I) - 1u; i++) {
             temp[temp_antilog[i]] = i;
         }
 
-        return std::array<T, sizeof...(I)>{ temp[I]... };
+        return temp;
     }
 
     static constexpr std::array<T, 1u << M> log_table = get_field_elements_inverse(std::make_index_sequence<1u << M>{});
