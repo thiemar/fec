@@ -169,7 +169,9 @@ class PuncturedConvolutionalEncoder {
                 std::make_index_sequence<ConstraintLength>{});
         }
 
-        interleaver::interleave(conv_vec, out);
+        std::array<uint8_t, interleaver::out_buf_len()> temp = interleaver::interleave(
+            Detail::to_array<bool_vec_t, interleaver::in_buf_len()>(conv_vec));
+        std::memcpy(out, temp.data(), interleaver::out_buf_len());
     }
 
 public:
@@ -317,10 +319,9 @@ class PuncturedHardDecisionViterbiDecoder {
     static void decode_block(const uint8_t *in,
             metric_t *path_metrics_1, metric_t *path_metrics_2,
             bool_vec_t *decisions, std::index_sequence<BitIndices...>) {
-        bool_vec_t in_vec[interleaver::in_buf_len()] = {};
-
         /* Deinterleave the block into boolean vectors. */
-        interleaver::deinterleave(in, in_vec);
+        std::array<bool_vec_t, interleaver::in_buf_len()> in_vec = interleaver::deinterleave(
+            Detail::to_array<uint8_t, interleaver::out_buf_len()>(in));
 
         /*
         Each iteration, we need the current and next path metrics. The
@@ -328,7 +329,7 @@ class PuncturedHardDecisionViterbiDecoder {
         returns the new path metrics.
         */
         int _[] = { (calculate_trellis_step<BitIndices % (PuncturingMatrix::size() / sizeof...(Polynomials))>(
-            get_in_bits<BitIndices>(in_vec, std::make_index_sequence<sizeof...(Polynomials)>{}),
+            get_in_bits<BitIndices>(in_vec.data(), std::make_index_sequence<sizeof...(Polynomials)>{}),
             BitIndices % 2u ? path_metrics_2 : path_metrics_1,
             BitIndices % 2u ? path_metrics_1 : path_metrics_2,
             &decisions[BitIndices * decision_size()], std::make_integer_sequence<state_vec_t, num_states()>{}), 0)... };

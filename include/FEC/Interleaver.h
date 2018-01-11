@@ -233,63 +233,57 @@ class Interleaver {
         std::make_index_sequence<Interleaver::num_poly_bits<PolyIndex>()>>::type;
 
     /* Interleaves a block of bool_vec_t. */
-    template <std::size_t... I, std::size_t... O>
-    static void interleave_block(const bool_vec_t *in, uint8_t *out, std::index_sequence<I...>, std::index_sequence<O...>) {
-        bool_vec_t out_vec[sizeof...(I)];
-
+    template <std::size_t N, std::size_t... I, std::size_t... O>
+    static std::array<uint8_t, sizeof...(O)> interleave_block(const std::array<bool_vec_t, N> &in,
+            std::index_sequence<I...>, std::index_sequence<O...>) {
         /* Pack bits into input vector and interleave. */
-        int _1[] = { (out_vec[I] = pack_and_spread_vec<I>(in, std::make_index_sequence<NumPoly>{}), 0)... };
-        (void)_1;
+        std::array<bool_vec_t, sizeof...(I)> out_vec = { pack_and_spread_vec<I>(in, std::make_index_sequence<NumPoly>{}) ... };
 
         /* Pack interleaved bits into output buffer. */
-        int _2[] = { (pack_out_vec<O>(out_vec, out), 0)... };
-        (void)_2;
+        return std::array<uint8_t, sizeof...(O)>{ pack_out_vec<O>(out_vec) ... };
     }
 
     /*
     Pack bits from 'in' into a bool_vec_t array such that they are aligned
     correctly, and then call spread_words.
     */
-    template <std::size_t I, std::size_t... PolyIndices>
-    static bool_vec_t pack_and_spread_vec(const bool_vec_t *in, std::index_sequence<PolyIndices...>) {
-        bool_vec_t in_vec[NumPoly];
+    template <std::size_t I, std::size_t N, std::size_t... PolyIndices>
+    static bool_vec_t pack_and_spread_vec(const std::array<bool_vec_t, N> &in, std::index_sequence<PolyIndices...>) {
         constexpr std::size_t coarse_offset = ((I * num_in_bits()) / (sizeof(bool_vec_t) * 8u)) * NumPoly;
         constexpr std::size_t fine_offset = (I * num_in_bits()) % (sizeof(bool_vec_t) * 8u);
 
-        int _1[] = { (in_vec[PolyIndices] = in[coarse_offset + PolyIndices] << fine_offset, 0)... };
-        (void)_1;
+        std::array<bool_vec_t, NumPoly> in_vec = { (bool_vec_t)(in[coarse_offset + PolyIndices] << fine_offset) ... };
 
-        if (coarse_offset < in_buf_len() - NumPoly && fine_offset) {
-            int _2[] = { (in_vec[PolyIndices] |=
-                in[coarse_offset + PolyIndices + NumPoly] >> (sizeof(bool_vec_t) * 8u - fine_offset), 0)... };
-            (void)_2;
+        if constexpr (coarse_offset < in_buf_len() - NumPoly && fine_offset) {
+            ((in_vec[PolyIndices] |= in[coarse_offset + PolyIndices + NumPoly] >> (sizeof(bool_vec_t) * 8u - fine_offset)), ...);
         }
 
         constexpr bool_vec_t mask = Detail::mask_bits(num_in_bits());
-
-        int _3[] = { (in_vec[PolyIndices] &= mask, 0)... };
-        (void)_3;
+        ((in_vec[PolyIndices] &= mask), ...);
 
         return spread_words(in_vec, std::index_sequence<PolyIndices...>{});
     }
 
     /* Pack 8 bits from 'in' into a single output byte. */
-    template <std::size_t I>
-    static void pack_out_vec(const bool_vec_t *in, uint8_t *out) {
-        constexpr std::size_t coarse_offset = (I * 8u) / num_out_bits();
-        constexpr std::size_t fine_offset = (I * 8u) % num_out_bits();
+    template <std::size_t O, std::size_t N>
+    static uint8_t pack_out_vec(const std::array<bool_vec_t, N> &in) {
+        constexpr std::size_t coarse_offset = (O * 8u) / num_out_bits();
+        constexpr std::size_t fine_offset = (O * 8u) % num_out_bits();
 
         constexpr bool_vec_t mask = Detail::mask_bits(num_out_bits());
 
-        if (fine_offset <= (sizeof(bool_vec_t)-1u) * 8u) {
-            out[I] = (in[coarse_offset] & mask) >> ((sizeof(bool_vec_t)-1u) * 8u - fine_offset);
+        uint8_t out;
+        if constexpr (fine_offset <= (sizeof(bool_vec_t)-1u) * 8u) {
+            out = (in[coarse_offset] & mask) >> ((sizeof(bool_vec_t)-1u) * 8u - fine_offset);
         } else {
-            out[I] = (in[coarse_offset] & mask) << (fine_offset - (sizeof(bool_vec_t)-1u) * 8u);
+            out = (in[coarse_offset] & mask) << (fine_offset - (sizeof(bool_vec_t)-1u) * 8u);
         }
 
-        if (num_out_bits() - fine_offset < 8u) {
-            out[I] |= in[coarse_offset+1u] >> ((sizeof(bool_vec_t)-1u) * 8u + num_out_bits() - fine_offset);
+        if constexpr (num_out_bits() - fine_offset < 8u) {
+            out |= in[coarse_offset+1u] >> ((sizeof(bool_vec_t)-1u) * 8u + num_out_bits() - fine_offset);
         }
+
+        return out;
     }
 
     /*
@@ -300,48 +294,47 @@ class Interleaver {
     bool_vec_t multiplied by the code rate.
     */
     template <std::size_t... PolyIndices>
-    static bool_vec_t spread_words(const bool_vec_t *in, std::index_sequence<PolyIndices...>) {
-        bool_vec_t out = 0u;
-        int _[] = { (out |= Detail::spread_word<sizeof(bool_vec_t) * 8u / 2u>(
+    static bool_vec_t spread_words(const std::array<bool_vec_t, NumPoly> &in, std::index_sequence<PolyIndices...>) {
+        bool_vec_t out = (... | (Detail::spread_word<sizeof(bool_vec_t) * 8u / 2u>(
             in[PolyIndices], input_index_sequence<PolyIndices>{},
             (typename Detail::DiffIndexSequence<output_index_sequence<PolyIndices>,
-            input_index_sequence<PolyIndices>>::type){}) >>
-            PolyIndices, 0)... };
-        (void)_;
+            input_index_sequence<PolyIndices>>::type){}) >> PolyIndices));
 
         return out;
     }
 
     /* Deinterleaves a block of bytes. */
-    template <std::size_t... I, std::size_t... O>
-    static void deinterleave_block(const uint8_t *in, bool_vec_t *out, std::index_sequence<I...>, std::index_sequence<O...>) {
-        bool_vec_t in_vec[sizeof...(O)] = {};
+    template <std::size_t N, std::size_t... I, std::size_t... O>
+    static std::array<bool_vec_t, N> deinterleave_block(const std::array<uint8_t, sizeof...(I)> &in,
+            std::index_sequence<I...>, std::index_sequence<O...>) {
+        std::array<bool_vec_t, sizeof...(O)> in_vec = {};
 
         /* Pack data from input buffer into bool_vec_t. */
-        int _2[] = { (unpack_in_vec<I>(in, in_vec), 0)... };
-        (void)_2;
+        (unpack_in_vec<I>(in[I], in_vec), ...);
 
         /* Deinterleave and pack bits into output vector. */
-        int _1[] = { (despread_and_pack_vector<O>(in_vec, out, std::make_index_sequence<NumPoly>{}), 0)... };
-        (void)_1;
+        std::array<bool_vec_t, N> out = {};
+        (despread_and_pack_vector<O>(in_vec, out, std::make_index_sequence<NumPoly>{}), ...);
+
+        return out;
     }
 
     /* Unpack a byte from 'in' into a bool_vec_t at the appropriate index. */
-    template <std::size_t I>
-    static void unpack_in_vec(const uint8_t *in, bool_vec_t *out) {
+    template <std::size_t I, std::size_t N>
+    static void unpack_in_vec(uint8_t in, std::array<bool_vec_t, N> &in_vec) {
         constexpr std::size_t coarse_offset = (I * 8u) / num_out_bits();
         constexpr std::size_t fine_offset = (I * 8u) % num_out_bits();
 
         constexpr bool_vec_t mask = Detail::mask_bits(num_out_bits());
 
-        if (fine_offset <= (sizeof(bool_vec_t)-1u) * 8u) {
-            out[coarse_offset] |= ((bool_vec_t)in[I] << ((sizeof(bool_vec_t)-1u) * 8u - fine_offset)) & mask;
+        if constexpr (fine_offset <= (sizeof(bool_vec_t)-1u) * 8u) {
+            in_vec[coarse_offset] |= ((bool_vec_t)in << ((sizeof(bool_vec_t)-1u) * 8u - fine_offset)) & mask;
         } else {
-            out[coarse_offset] |= ((bool_vec_t)in[I] >> (fine_offset - (sizeof(bool_vec_t)-1u) * 8u)) & mask;
+            in_vec[coarse_offset] |= ((bool_vec_t)in >> (fine_offset - (sizeof(bool_vec_t)-1u) * 8u)) & mask;
         }
 
-        if (num_out_bits() - fine_offset < 8u) {
-            out[coarse_offset+1u] |= (bool_vec_t)in[I] << ((sizeof(bool_vec_t)-1u) * 8u + num_out_bits() - fine_offset);
+        if constexpr (num_out_bits() - fine_offset < 8u) {
+            in_vec[coarse_offset+1u] |= (bool_vec_t)in << ((sizeof(bool_vec_t)-1u) * 8u + num_out_bits() - fine_offset);
         }
     }
 
@@ -349,25 +342,21 @@ class Interleaver {
     Deinterleave bits from the input vector, and then pack them into the
     array of output vectors.
     */
-    template <std::size_t O, std::size_t... PolyIndices>
-    static void despread_and_pack_vector(const bool_vec_t *in, bool_vec_t *out, std::index_sequence<PolyIndices...>) {
-        bool_vec_t in_vec[NumPoly];
-        int _[] = { (in_vec[PolyIndices] = Detail::despread_word<1u>(
-            in[O] << PolyIndices, output_index_sequence<PolyIndices>{},
+    template <std::size_t O, std::size_t N, std::size_t M, std::size_t... PolyIndices>
+    static void despread_and_pack_vector(const std::array<bool_vec_t, N> &in_vec, std::array<bool_vec_t, M> &out,
+            std::index_sequence<PolyIndices...>) {
+        std::array<bool_vec_t, NumPoly> in_despread = { Detail::despread_word<1u>(
+            in_vec[O] << PolyIndices, output_index_sequence<PolyIndices>{},
             (typename Detail::DiffIndexSequence<output_index_sequence<PolyIndices>,
-            input_index_sequence<PolyIndices>>::type){}), 0)... };
-        (void)_;
+            input_index_sequence<PolyIndices>>::type){}) ... };
 
         constexpr std::size_t coarse_offset = ((O * num_in_bits()) / (sizeof(bool_vec_t) * 8u)) * NumPoly;
         constexpr std::size_t fine_offset = (O * num_in_bits()) % (sizeof(bool_vec_t) * 8u);
 
-        int _1[] = { (out[coarse_offset + PolyIndices] |= in_vec[PolyIndices] >> fine_offset, 0)... };
-        (void)_1;
+        ((out[coarse_offset + PolyIndices] |= in_despread[PolyIndices] >> fine_offset), ...);
 
-        if (coarse_offset < in_buf_len() - NumPoly && fine_offset) {
-            int _2[] = { (out[coarse_offset + PolyIndices + NumPoly] |=
-                in_vec[PolyIndices] << (sizeof(bool_vec_t) * 8u - fine_offset), 0)... };
-            (void)_2;
+        if constexpr (coarse_offset < in_buf_len() - NumPoly && fine_offset) {
+            ((out[coarse_offset + PolyIndices + NumPoly] |= in_despread[PolyIndices] << (sizeof(bool_vec_t) * 8u - fine_offset)), ...);
         }
     }
 
@@ -388,26 +377,15 @@ public:
         return BlockSize * PuncturingMatrix::ones() / (PuncturingMatrix::size() / NumPoly);
     }
 
-    /*
-    Interleaves a block of bool_vec_t. The input buffer must have a length
-    equal to at least in_buf_len, and the output buffer must have a length
-    equal to at least out_buf_len.
-    */
-    static void interleave(const bool_vec_t *in, uint8_t *out) {
-        interleave_block(in, out,
-            std::make_index_sequence<num_iterations()>{},
-            std::make_index_sequence<out_buf_len()>{});
+    /* Interleaves a block of bool_vec_t. */
+    static std::array<uint8_t, out_buf_len()> interleave(const std::array<bool_vec_t, in_buf_len()> &in) {
+        return interleave_block(in, std::make_index_sequence<num_iterations()>{}, std::make_index_sequence<out_buf_len()>{});
     }
 
-    /*
-    Deinterleaves a block of bytes. The input buffer must have a length equal
-    to at least out_buf_len, and the output buffer must have a length equal
-    to at least in_buf_len.
-    */
-    static void deinterleave(const uint8_t *in, bool_vec_t *out) {
-        deinterleave_block(in, out,
-            std::make_index_sequence<out_buf_len()>{},
-            std::make_index_sequence<num_iterations()>{});
+    /* Deinterleaves a block of bytes. */
+    static std::array<bool_vec_t, in_buf_len()> deinterleave(const std::array<uint8_t, out_buf_len()> &in) {
+        return deinterleave_block<in_buf_len()>(in,
+            std::make_index_sequence<out_buf_len()>{}, std::make_index_sequence<num_iterations()>{});
     }
 };
 

@@ -173,8 +173,7 @@ public:
 
         for (std::size_t i = 0u; i < Len1 - sizeof...(Gs); i++) {
             if (d[i] != 0u) {
-                int _[] = { (d[i + Is + 1u] ^= antilog((log(Gs) + log(d[i])) % ((1u << M) - 1u)), 0)... };
-                (void)_;
+                ((d[i + Is + 1u] ^= antilog((log(Gs) + log(d[i])) % ((1u << M) - 1u))), ...);
             }
         }
 

@@ -41,13 +41,13 @@ using all_true = std::is_same<bool_pack<true, v...>, bool_pack<v..., true>>;
 
 /* Functions to convert C array to std::array. */
 template <typename T, std::size_t N, std::size_t... I>
-constexpr std::array<T, N> to_array_impl(const T (&a)[N], std::index_sequence<I...>) {
+constexpr std::array<T, N> to_array_impl(const T *a, std::index_sequence<I...>) {
     return { {a[I]...} };
 }
  
 template <typename T, std::size_t N>
-constexpr std::array<T, N> to_array(const T (&a)[N]) {
-    return to_array_impl(a, std::make_index_sequence<N>{});
+constexpr std::array<T, N> to_array(const T *a) {
+    return to_array_impl<T, N>(a, std::make_index_sequence<N>{});
 }
 
 template <typename T, std::size_t N, std::size_t... I>
