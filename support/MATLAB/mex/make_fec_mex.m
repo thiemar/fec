@@ -21,7 +21,7 @@ function make_fec_mex(test_params)
         sprintf('-DPOLAR_DATA_SIZE=%du', test_params.polar_data_size) ...
     };
 
-    cxxflags = 'CXXFLAGS=-std=c++14 -Wno-ignored-attributes -Wno-deprecated-declarations';
+    cxxflags = 'CXXFLAGS=-std=c++1z -Wno-ignored-attributes -Wno-deprecated-declarations';
     
     if ispc()
         ldflags = 'LDFLAGS=-static-libgcc -static-libstdc++ -static -lpthread';
