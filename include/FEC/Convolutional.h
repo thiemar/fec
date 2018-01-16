@@ -159,19 +159,17 @@ class PuncturedConvolutionalEncoder {
     'in' pointer in memory. If 'in' points to the start of the input data,
     these bytes should be zero.
     */
-    static void encode_block(const uint8_t *in, uint8_t *out) {
-        bool_vec_t conv_vec[interleaver::in_buf_len()] = {};
+    static std::array<uint8_t, interleaver::out_buf_len()> encode_block(const uint8_t *in) {
+        std::array<bool_vec_t, interleaver::in_buf_len()> conv_vec = {};
 
         constexpr std::size_t n_conv = block_size() / sizeof(bool_vec_t) + ((block_size() % sizeof(bool_vec_t)) ? 1u : 0u);
 
         for (std::size_t i = 0u; i < n_conv; i++) {
-            process_data(&in[i*sizeof(bool_vec_t)], &conv_vec[i*sizeof...(Polynomials)],
+            process_data(&in[i*sizeof(bool_vec_t)], &conv_vec.data()[i*sizeof...(Polynomials)],
                 std::make_index_sequence<ConstraintLength>{});
         }
 
-        std::array<uint8_t, interleaver::out_buf_len()> temp = interleaver::interleave(
-            Detail::to_array<bool_vec_t, interleaver::in_buf_len()>(conv_vec));
-        std::memcpy(out, temp.data(), interleaver::out_buf_len());
+        return interleaver::interleave(conv_vec);
     }
 
 public:
@@ -203,26 +201,31 @@ public:
     Do efficient convolutional encoding by carrying out a number of
     convolutions in parallel equal to the word size.
     */
-    static std::size_t encode(const uint8_t *in, std::size_t len, uint8_t *out) {
+    template <std::size_t Len>
+    static std::array<uint8_t, calculate_output_length(Len)> encode(const std::array<uint8_t, Len> &in) {
+        std::array<uint8_t, calculate_output_length(Len)> out;
+
         /*
         Use temporary arrays to allow input and output lengths of sizes which
         aren't integer multiples of the block size.
         */
         constexpr std::size_t flush_bytes = ConstraintLength / 8u + ((ConstraintLength % 8u) ? 1u : 0u);
         std::size_t out_idx = 0u;
-        for (std::size_t i = 0u; i < len + flush_bytes; i += block_size()) {
-            uint8_t in_block[block_size() + flush_bytes] = {};
-            uint8_t out_block[interleaver::out_buf_len()] = {};
+        for (std::size_t i = 0u; i < Len + flush_bytes; i += block_size()) {
+            std::array<uint8_t, block_size() + flush_bytes> in_block = {};
+            // std::fill_n(in_block.begin(), flush_bytes - std::min(i, flush_bytes), 0u);
+            std::copy_n(in.begin() + i - std::min(i, flush_bytes),
+                std::min(block_size(), Len - i) + std::min(i, flush_bytes),
+                in_block.begin() + flush_bytes - std::min(i, flush_bytes));
 
-            std::memcpy(&in_block[flush_bytes - std::min(i, flush_bytes)],
-                &in[i - std::min(i, flush_bytes)],
-                std::min(block_size(), len - i) + std::min(i, flush_bytes));
-            encode_block(&in_block[flush_bytes], out_block);
-            std::memcpy(&out[out_idx], out_block, std::min(interleaver::out_buf_len(), calculate_output_length(len) - out_idx));
-            out_idx += std::min(interleaver::out_buf_len(), calculate_output_length(len) - out_idx);
+            std::array<uint8_t, interleaver::out_buf_len()> out_block = encode_block(&in_block[flush_bytes]);
+            std::copy_n(out_block.begin(), std::min(interleaver::out_buf_len(), calculate_output_length(Len) - out_idx),
+                out.begin() + out_idx);
+
+            out_idx += std::min(interleaver::out_buf_len(), calculate_output_length(Len) - out_idx);
         }
 
-        return out_idx;
+        return out;
     }
 };
 

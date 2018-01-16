@@ -14,8 +14,8 @@ using TestEncoder = Thiemar::Convolutional::PuncturedConvolutionalEncoder<
 
 void ConvolutionalEncoder_Encode(benchmark::State& state) {
     /* Set up test buffers. */
-    uint8_t test_in[1024u] = {};
-    uint8_t test_out[TestEncoder::calculate_output_length(sizeof(test_in))] = {};
+    std::array<uint8_t, 1024u> test_in = {};
+    std::array<uint8_t, TestEncoder::calculate_output_length(test_in.size())> test_out = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -24,7 +24,7 @@ void ConvolutionalEncoder_Encode(benchmark::State& state) {
     }
 
     while(state.KeepRunning()) {
-        TestEncoder::encode(test_in, sizeof(test_in), test_out);
+        test_out = TestEncoder::encode(test_in);
     }
 }
 
@@ -61,8 +61,8 @@ using TestEncoderPunctured = Thiemar::Convolutional::PuncturedConvolutionalEncod
 
 void PuncturedConvolutionalEncoder_Encode(benchmark::State& state) {
     /* Set up test buffers. */
-    uint8_t test_in[1024u] = {};
-    uint8_t test_out[TestEncoderPunctured::calculate_output_length(sizeof(test_in))] = {};
+    std::array<uint8_t, 1024u> test_in = {};
+    std::array<uint8_t, TestEncoderPunctured::calculate_output_length(test_in.size())> test_out = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -71,7 +71,7 @@ void PuncturedConvolutionalEncoder_Encode(benchmark::State& state) {
     }
 
     while(state.KeepRunning()) {
-        TestEncoderPunctured::encode(test_in, sizeof(test_in), test_out);
+        test_out = TestEncoderPunctured::encode(test_in);
     }
 }
 

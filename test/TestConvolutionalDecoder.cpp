@@ -27,44 +27,42 @@ TEST(ConvolutionalDecoderTest, ReferenceDecode) {
         uint8_t, 0b1011011, 0b1111001> fecmagic_dec;
 
     /* Set up test buffers. */
-    uint8_t test_in[1024u] = {};
-    uint8_t test_out[TestEncoder::calculate_output_length(sizeof(test_in))] = {0xaa};
-    uint8_t test_decoded_fecmagic[TestDecoder::calculate_output_length(sizeof(test_out))] = {};
+    std::array<uint8_t, 1024u> test_in = {};
+    uint8_t test_decoded_fecmagic[TestDecoder::calculate_output_length(TestEncoder::calculate_output_length(test_in.size()))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < test_in.size(); i++) {
         test_in[i] = std::rand() & 0xffu;
     }
 
-    TestEncoder::encode(test_in, sizeof(test_in), test_out);
+    auto test_out = TestEncoder::encode(test_in);
 
     /* Decode with fecmagic. */
     fecmagic_dec.reset(test_decoded_fecmagic);
-    fecmagic_dec.decode(test_out, TestEncoder::calculate_output_length(sizeof(test_in)));
+    fecmagic_dec.decode(test_out.data(), test_out.size());
     fecmagic_dec.flush();
 
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < test_in.size(); i++) {
         EXPECT_EQ((int)test_in[i], (int)test_decoded_fecmagic[i]) << "Buffers differ at index " << i;
     }
 }
 
 TEST(ConvolutionalDecoderTest, Decode) {
     /* Set up test buffers. */
-    uint8_t test_in[1024u] = {};
-    uint8_t test_out[TestEncoder::calculate_output_length(sizeof(test_in))] = {0xaa};
-    uint8_t test_decoded[TestDecoder::calculate_output_length(sizeof(test_out))] = {};
+    std::array<uint8_t, 1024u> test_in = {};
+    uint8_t test_decoded[TestDecoder::calculate_output_length(TestEncoder::calculate_output_length(test_in.size()))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < test_in.size(); i++) {
         test_in[i] = std::rand() & 0xffu;
     }
 
-    TestEncoder::encode(test_in, sizeof(test_in), test_out);
-    TestDecoder::decode(test_out, sizeof(test_out), test_decoded);
+    auto test_out = TestEncoder::encode(test_in);
+    TestDecoder::decode(test_out.data(), test_out.size(), test_decoded);
 
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < test_in.size(); i++) {
         EXPECT_EQ((int)test_in[i], (int)test_decoded[i]) << "Buffers differ at index " << i;
     }
 }
@@ -86,20 +84,19 @@ using TestDecoderPunctured = Thiemar::Convolutional::PuncturedHardDecisionViterb
 
 TEST(PuncturedConvolutionalDecoderTest, Decode) {
     /* Set up test buffers. */
-    uint8_t test_in[1024u] = {};
-    uint8_t test_out[TestEncoderPunctured::calculate_output_length(sizeof(test_in))] = {0xaa};
-    uint8_t test_decoded[TestDecoderPunctured::calculate_output_length(sizeof(test_out))] = {};
+    std::array<uint8_t, 1024u> test_in = {};
+    uint8_t test_decoded[TestDecoder::calculate_output_length(TestEncoder::calculate_output_length(test_in.size()))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < test_in.size(); i++) {
         test_in[i] = std::rand() & 0xffu;
     }
 
-    TestEncoderPunctured::encode(test_in, sizeof(test_in), test_out);
-    TestDecoderPunctured::decode(test_out, sizeof(test_out), test_decoded);
+    auto test_out = TestEncoderPunctured::encode(test_in);
+    TestDecoderPunctured::decode(test_out.data(), test_out.size(), test_decoded);
 
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < test_in.size(); i++) {
         EXPECT_EQ((int)test_in[i], (int)test_decoded[i]) << "Buffers differ at index " << i;
     }
 }
@@ -123,20 +120,19 @@ using TestDecoderRate3 = Thiemar::Convolutional::PuncturedHardDecisionViterbiDec
 
 TEST(ConvolutionalDecoderRate3Test, Decode) {
     /* Set up test buffers. */
-    uint8_t test_in[1024u] = {};
-    uint8_t test_out[TestEncoderRate3::calculate_output_length(sizeof(test_in))] = {0xaa};
-    uint8_t test_decoded[TestDecoderRate3::calculate_output_length(sizeof(test_out))] = {};
+    std::array<uint8_t, 1024u> test_in = {};
+    uint8_t test_decoded[test_in.size()] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < test_in.size(); i++) {
         test_in[i] = std::rand() & 0xffu;
     }
 
-    TestEncoderRate3::encode(test_in, sizeof(test_in), test_out);
-    TestDecoderRate3::decode(test_out, sizeof(test_out), test_decoded);
+    auto test_out = TestEncoderRate3::encode(test_in);
+    TestDecoderRate3::decode(test_out.data(), test_out.size(), test_decoded);
 
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < test_in.size(); i++) {
         EXPECT_EQ((int)test_in[i], (int)test_decoded[i]) << "Buffers differ at index " << i;
     }
 }
