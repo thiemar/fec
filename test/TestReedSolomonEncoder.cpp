@@ -30,7 +30,7 @@ TEST(ReedSolomonEncoderTest, Encode) {
 
     using TestEncoder = Thiemar::ReedSolomon::ReedSolomonEncoder<
         8u, Thiemar::ReedSolomon::Polynomials::m_8_285, MESSAGE_PARITY_LENGTH>;
-    uint8_t buf[MESSAGE_DATA_LENGTH+MESSAGE_PARITY_LENGTH] = {};
+    std::array<uint8_t, MESSAGE_DATA_LENGTH+MESSAGE_PARITY_LENGTH> buf = {};
     
     std::srand(123u);
     for (std::size_t i = 0u; i < MESSAGE_DATA_LENGTH; i++) {

@@ -100,15 +100,13 @@ public:
     Calculate parity for up to (2^M - Parity - 1) message bytes from 'input',
     placing the parity bytes at the end of the message bytes.
     */
-    template <std::size_t N>
-    static void encode(gf_t *buf) {
-        static_assert(N <= (1u << M) - 1u - Parity,
+    template <std::size_t Len>
+    static void encode(std::array<gf_t, Len + Parity> &in) {
+        static_assert(Len <= (1u << M) - 1u - Parity,
             "Data length must be smaller than or equal to block size minus parity length");
-        std::array<gf_t, N+Parity> message = Detail::to_array<gf_t, N+Parity>(buf);
-
-        std::array<gf_t, Parity> parity = gf::remainder(message, generator{},
+        std::array<gf_t, Parity> parity = gf::remainder(in, generator{},
             std::make_index_sequence<Parity>{});
-        memcpy(&buf[N], parity.data(), Parity);
+        std::copy_n(parity.data(), Parity, in.begin() + Len);
     }
 };
 
