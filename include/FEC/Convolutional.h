@@ -243,7 +243,6 @@ class PuncturedHardDecisionViterbiDecoder {
     static_assert(sizeof(bool_vec_t) * 8u / PuncturingMatrix::ones() > 0u,
         "Word size must be large enough to fit at least one puncturing matrix cycle");
 
-    /* TODO: Choose more size-optimal definitions for these. */
     using metric_t = bool_vec_t;
     using state_vec_t = bool_vec_t;
     using bit_vec_t = uint8_t;
@@ -284,7 +283,7 @@ class PuncturedHardDecisionViterbiDecoder {
         }
 
         /* Do a final partial block operation if needed. */
-        if (TracebackLength % (block_size() * 8u)) {
+        if constexpr ((TracebackLength % (block_size() * 8u)) != 0u) {
             decode_block(&in[idx], path_metrics, temp_path_metrics, &decisions[i * block_size() * 8u * decision_size()],
                 std::make_index_sequence<TracebackLength % (block_size() * 8u)>{});
         }
@@ -326,26 +325,20 @@ class PuncturedHardDecisionViterbiDecoder {
         calculate_trellis_step function takes the current path metrics and
         returns the new path metrics.
         */
-        int _[] = { (calculate_trellis_step<BitIndices % (PuncturingMatrix::size() / sizeof...(Polynomials))>(
+        (calculate_trellis_step<BitIndices % (PuncturingMatrix::size() / sizeof...(Polynomials))>(
             get_in_bits<BitIndices>(in_vec.data(), std::make_index_sequence<sizeof...(Polynomials)>{}),
             BitIndices % 2u ? path_metrics_2 : path_metrics_1,
             BitIndices % 2u ? path_metrics_1 : path_metrics_2,
-            &decisions[BitIndices * decision_size()], std::make_integer_sequence<state_vec_t, num_states()>{}), 0)... };
-        (void)_;
+            &decisions[BitIndices * decision_size()], std::make_integer_sequence<state_vec_t, num_states()>{}), ...);
     }
 
     template <std::size_t BitIndex, std::size_t... PolyIndices>
     static bit_vec_t get_in_bits(const bool_vec_t *in_vec, std::index_sequence<PolyIndices...>) {
-        bit_vec_t out = 0u;
-
         constexpr std::size_t coarse_offset = BitIndex / (sizeof(bool_vec_t) * 8u);
         constexpr std::size_t fine_offset = BitIndex % (sizeof(bool_vec_t) * 8u);
 
-        int _[] = { (out |= ((in_vec[coarse_offset * sizeof...(Polynomials) + PolyIndices] &
-            ((bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u)-1u - fine_offset))) ? 1u : 0u) << PolyIndices, 0)... };
-        (void)_;
-
-        return out;
+        return ((((in_vec[coarse_offset * sizeof...(Polynomials) + PolyIndices] &
+            ((bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u)-1u - fine_offset))) ? 1u : 0u) << PolyIndices) | ...);
     }
 
     template <std::size_t PunctureIndex, state_vec_t... StateIndices>
@@ -353,10 +346,9 @@ class PuncturedHardDecisionViterbiDecoder {
             const metric_t *cur_path_metrics, metric_t *next_path_metrics,
             bool_vec_t *decisions, std::integer_sequence<state_vec_t, StateIndices...>) {
         /* Carry out add-compare-select for each possible state. */
-        int _[] = { (next_path_metrics[StateIndices] = add_compare_select<
+        ((next_path_metrics[StateIndices] = add_compare_select<
             calculate_puncture_mask<PunctureIndex>(std::make_index_sequence<sizeof...(Polynomials)>{}), StateIndices>(
-            in_bits, cur_path_metrics, decisions), 0)... };
-        (void)_;
+            in_bits, cur_path_metrics, decisions)), ...);
     }
 
     template <std::size_t I, std::size_t... PolyIndices>
@@ -430,7 +422,10 @@ public:
     Decode a block of convolutionally encoded data using the Viterbi
     algorithm with hard-decisions.
     */
-    static std::size_t decode(const uint8_t *in, std::size_t len, uint8_t *out) {
+    template <std::size_t Len>
+    static std::array<uint8_t, calculate_output_length(Len)> decode(const std::array<uint8_t, Len> &in) {
+        std::array<uint8_t, calculate_output_length(Len)> out = {};
+
         /*
         Initialise path metric corresponding to state 0 to 0, and all other
         paths to a sufficiently large value.
@@ -443,14 +438,11 @@ public:
             (PuncturingMatrix::size() / sizeof...(Polynomials));
         std::size_t out_idx = 0u;
 
-        for (std::size_t i = 0u; i < len; i += in_bytes) {
-            uint8_t in_block[std::max(in_bytes, interleaver::out_buf_len())] = {};
-
-            std::memcpy(in_block, &in[i], std::min(in_bytes, len - i));
-            out_idx += decode_traceback(&in[i], len - i, &out[out_idx], path_metrics);
+        for (std::size_t i = 0u; i < Len; i += in_bytes) {
+            out_idx += decode_traceback(&in.data()[i], Len - i, &out[out_idx], path_metrics);
         }
 
-        return out_idx;
+        return out;
     }
 };
 

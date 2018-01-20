@@ -51,7 +51,6 @@ TEST(ConvolutionalDecoderTest, ReferenceDecode) {
 TEST(ConvolutionalDecoderTest, Decode) {
     /* Set up test buffers. */
     std::array<uint8_t, 1024u> test_in = {};
-    uint8_t test_decoded[TestDecoder::calculate_output_length(TestEncoder::calculate_output_length(test_in.size()))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -60,7 +59,7 @@ TEST(ConvolutionalDecoderTest, Decode) {
     }
 
     auto test_out = TestEncoder::encode(test_in);
-    TestDecoder::decode(test_out.data(), test_out.size(), test_decoded);
+    auto test_decoded = TestDecoder::decode(test_out);
 
     for (std::size_t i = 0u; i < test_in.size(); i++) {
         EXPECT_EQ((int)test_in[i], (int)test_decoded[i]) << "Buffers differ at index " << i;
@@ -85,7 +84,6 @@ using TestDecoderPunctured = Thiemar::Convolutional::PuncturedHardDecisionViterb
 TEST(PuncturedConvolutionalDecoderTest, Decode) {
     /* Set up test buffers. */
     std::array<uint8_t, 1024u> test_in = {};
-    uint8_t test_decoded[TestDecoder::calculate_output_length(TestEncoder::calculate_output_length(test_in.size()))] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -94,7 +92,7 @@ TEST(PuncturedConvolutionalDecoderTest, Decode) {
     }
 
     auto test_out = TestEncoderPunctured::encode(test_in);
-    TestDecoderPunctured::decode(test_out.data(), test_out.size(), test_decoded);
+    auto test_decoded = TestDecoderPunctured::decode(test_out);
 
     for (std::size_t i = 0u; i < test_in.size(); i++) {
         EXPECT_EQ((int)test_in[i], (int)test_decoded[i]) << "Buffers differ at index " << i;
@@ -121,7 +119,6 @@ using TestDecoderRate3 = Thiemar::Convolutional::PuncturedHardDecisionViterbiDec
 TEST(ConvolutionalDecoderRate3Test, Decode) {
     /* Set up test buffers. */
     std::array<uint8_t, 1024u> test_in = {};
-    uint8_t test_decoded[test_in.size()] = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
@@ -130,7 +127,7 @@ TEST(ConvolutionalDecoderRate3Test, Decode) {
     }
 
     auto test_out = TestEncoderRate3::encode(test_in);
-    TestDecoderRate3::decode(test_out.data(), test_out.size(), test_decoded);
+    auto test_decoded = TestDecoderRate3::decode(test_out);
 
     for (std::size_t i = 0u; i < test_in.size(); i++) {
         EXPECT_EQ((int)test_in[i], (int)test_decoded[i]) << "Buffers differ at index " << i;
