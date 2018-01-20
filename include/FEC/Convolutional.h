@@ -115,32 +115,28 @@ class PuncturedConvolutionalEncoder {
     Pull in a number of data bits from 'in' corresponding to the size of the
     bool_vec_t data type.
     */
-    template <std::size_t... ConstraintIndices>
-    static void process_data(const uint8_t *in, bool_vec_t *out, std::index_sequence<ConstraintIndices...>) {
+    template <std::size_t... ConstraintIndices, std::size_t... ByteIndices>
+    static void process_data(const uint8_t *in, bool_vec_t *out,
+            std::index_sequence<ConstraintIndices...>, std::index_sequence<ByteIndices...>) {
+        /* Pack input data into a bool_vec_t. */
+        bool_vec_t cur_vec = (((bool_vec_t)in[ByteIndices] << ((sizeof(bool_vec_t)-1u - ByteIndices) * 8u)) | ...);
+
         /*
         Number of bytes from the input buffer that we need is determined by
         the working vector size and the constraint length index.
         */
-        int _[] = { (calculate_convolutions<ConstraintIndices>(in, out,
-            std::make_index_sequence<sizeof...(Polynomials)>{}, std::make_index_sequence<sizeof(bool_vec_t)>{}), 0)... };
-        (void)_;
+        ((cur_vec = calculate_convolutions<ConstraintIndices>(cur_vec,
+            in[-(ConstraintIndices / 8u) - 1u] & ((uint8_t)1u << (ConstraintIndices % 8u)), out,
+            std::make_index_sequence<sizeof...(Polynomials)>{})), ...);
     }
 
-    template <std::size_t ConstraintIndex, std::size_t... PolyIndices, std::size_t... ByteIndices>
-    static void calculate_convolutions(const uint8_t *in, bool_vec_t *out,
-            std::index_sequence<PolyIndices...>, std::index_sequence<ByteIndices...>) {
-        constexpr std::size_t coarse_offset = ConstraintIndex / 8u;
-        constexpr std::size_t fine_offset = ConstraintIndex % 8u;
-
-        /* Pack data into working vector. */
-        bool_vec_t cur_vec = ((bool_vec_t)in[-coarse_offset - 1] << ((sizeof(bool_vec_t)-1u) * 8u)) << (8u - fine_offset);
-        int _1[] = { (cur_vec |= ((bool_vec_t)in[ByteIndices + -coarse_offset] <<
-            ((sizeof(bool_vec_t)-1u - ByteIndices) * 8u)) >> fine_offset, 0)... };
-        (void)_1;
-
+    template <std::size_t ConstraintIndex, std::size_t... PolyIndices>
+    static bool_vec_t calculate_convolutions(bool_vec_t in_vec, bool next_bit, bool_vec_t *out, std::index_sequence<PolyIndices...>) {
         /* Calculate applicable polynomial taps. */
-        int _2[] = { (calculate_taps<ConstraintLength-1u - ConstraintIndex, Polynomials, PolyIndices>(cur_vec, out), 0)... };
-        (void)_2;
+        (calculate_taps<ConstraintLength-1u - ConstraintIndex, Polynomials, PolyIndices>(in_vec, out), ...);
+
+        /* Return the next convolution vector. */
+        return (in_vec >> 1u) | (next_bit ? ((bool_vec_t)1u << (sizeof(bool_vec_t) * 8u - 1u)) : 0u);
     }
 
     /* For the given polynomial, carry out an XOR if this bit is set. */
@@ -166,7 +162,7 @@ class PuncturedConvolutionalEncoder {
 
         for (std::size_t i = 0u; i < n_conv; i++) {
             process_data(&in[i*sizeof(bool_vec_t)], &conv_vec.data()[i*sizeof...(Polynomials)],
-                std::make_index_sequence<ConstraintLength>{});
+                std::make_index_sequence<ConstraintLength>{}, std::make_index_sequence<sizeof(bool_vec_t)>{});
         }
 
         return interleaver::interleave(conv_vec);
@@ -213,7 +209,6 @@ public:
         std::size_t out_idx = 0u;
         for (std::size_t i = 0u; i < Len + flush_bytes; i += block_size()) {
             std::array<uint8_t, block_size() + flush_bytes> in_block = {};
-            // std::fill_n(in_block.begin(), flush_bytes - std::min(i, flush_bytes), 0u);
             std::copy_n(in.begin() + i - std::min(i, flush_bytes),
                 std::min(block_size(), Len - i) + std::min(i, flush_bytes),
                 in_block.begin() + flush_bytes - std::min(i, flush_bytes));
