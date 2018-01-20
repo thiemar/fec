@@ -305,7 +305,7 @@ class PuncturedHardDecisionViterbiDecoder {
                 state |= 1u;
             }
 
-            state &= (num_states() - 1u);
+            state &= num_states() - 1u;
         }
 
         return traceback_bits / 8u;
@@ -337,8 +337,8 @@ class PuncturedHardDecisionViterbiDecoder {
         constexpr std::size_t coarse_offset = BitIndex / (sizeof(bool_vec_t) * 8u);
         constexpr std::size_t fine_offset = BitIndex % (sizeof(bool_vec_t) * 8u);
 
-        return ((((in_vec[coarse_offset * sizeof...(Polynomials) + PolyIndices] &
-            ((bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u)-1u - fine_offset))) ? 1u : 0u) << PolyIndices) | ...);
+        return (((in_vec[coarse_offset * sizeof...(Polynomials) + PolyIndices] &
+            ((bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u)-1u - fine_offset))) ? (1u << PolyIndices) : 0u) | ...);
     }
 
     template <std::size_t PunctureIndex, state_vec_t... StateIndices>
@@ -399,14 +399,9 @@ class PuncturedHardDecisionViterbiDecoder {
     /* Calculate the expected set of encoder outputs for a given state. */
     template <std::size_t... PolyIndices>
     static constexpr bit_vec_t calculate_expected_bits(state_vec_t state, std::index_sequence<PolyIndices...>) {
-        bit_vec_t out = 0u;
         constexpr state_vec_t poly_vec[sizeof...(Polynomials)] = { Polynomials::to_integer()... };
 
-        for (std::size_t i : { PolyIndices... }) {
-            out |= (Detail::calculate_hamming_weight(state & poly_vec[i]) % 2u) << i;
-        }
-
-        return out;
+        return (((Detail::calculate_hamming_weight(state & poly_vec[PolyIndices]) % 2u) << PolyIndices) | ...);
     }
 
 public:
