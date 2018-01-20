@@ -353,13 +353,7 @@ class PuncturedHardDecisionViterbiDecoder {
 
     template <std::size_t I, std::size_t... PolyIndices>
     static constexpr bit_vec_t calculate_puncture_mask(std::index_sequence<PolyIndices...>) {
-        bit_vec_t out = {};
-
-        for (std::size_t i : { PolyIndices... }) {
-            out |= PuncturingMatrix::test(I * sizeof...(Polynomials) + i) << i;
-        }
-
-        return out;
+        return ((PuncturingMatrix::test(I * sizeof...(Polynomials) + PolyIndices) << PolyIndices) | ...);
     }
 
     /* Carry out an add-compare-select operation for a single bit. */
