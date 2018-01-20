@@ -10,12 +10,12 @@ void PolarEncoderBlockSize1024_Encode(benchmark::State& state) {
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
 
     /* Set up test buffers. */
-    uint8_t test_in[K / 8u] = {};
+    std::array<uint8_t, K / 8u> test_in = {};
     std::array<uint8_t, M / 8u> test_out = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < test_in.size(); i++) {
         test_in[i] = std::rand() & 0xffu;
     }
 
@@ -34,12 +34,12 @@ void PolarEncoderBlockSize768_Encode(benchmark::State& state) {
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
 
     /* Set up test buffers. */
-    uint8_t test_in[K / 8u] = {};
+    std::array<uint8_t, K / 8u> test_in = {};
     std::array<uint8_t, M / 8u> test_out = {};
 
     /* Seed RNG for repeatibility. */
     std::srand(123u);
-    for (std::size_t i = 0u; i < sizeof(test_in); i++) {
+    for (std::size_t i = 0u; i < test_in.size(); i++) {
         test_in[i] = std::rand() & 0xffu;
     }
 

@@ -40,7 +40,7 @@ TEST(PolarEncoderTest, EncodeBlockSize1024) {
          86,   8,  28,  32, 212,  88, 197,   6
     };
 
-    std::array<uint8_t, M / 8u> test_out = TestEncoder::encode(test_in.data());
+    std::array<uint8_t, M / 8u> test_out = TestEncoder::encode(test_in);
 
     for (std::size_t i = 0u; i < test_out.size(); i++) {
         EXPECT_EQ((int)ref_out[i], (int)test_out[i]) << "Buffers differ at index " << i;
@@ -81,7 +81,7 @@ TEST(PolarEncoderTest, EncodeBlockSize768) {
          86,   8,  28,  32, 212,  88, 197,   6
     };
 
-    std::array<uint8_t, M / 8u> test_out = TestEncoder::encode(test_in.data());
+    std::array<uint8_t, M / 8u> test_out = TestEncoder::encode(test_in);
 
     for (std::size_t i = 0u; i < test_out.size(); i++) {
         EXPECT_EQ((int)ref_out[i], (int)test_out[i]) << "Buffers differ at index " << i;
@@ -119,7 +119,7 @@ TEST(PolarEncoderTest, EncodeBlockSize520) {
           6
     };
 
-    std::array<uint8_t, M / 8u> test_out = TestEncoder::encode(test_in.data());
+    std::array<uint8_t, M / 8u> test_out = TestEncoder::encode(test_in);
 
     for (std::size_t i = 0u; i < test_out.size(); i++) {
         EXPECT_EQ((int)ref_out[i], (int)test_out[i]) << "Buffers differ at index " << i;
@@ -156,7 +156,7 @@ TEST(PolarEncoderTest, EncodeBlockSize512) {
          86,   8,  28,  32, 212,  88, 197,   6
     };
 
-    std::array<uint8_t, M / 8u> test_out = TestEncoder::encode(test_in.data());
+    std::array<uint8_t, M / 8u> test_out = TestEncoder::encode(test_in);
 
     for (std::size_t i = 0u; i < test_out.size(); i++) {
         EXPECT_EQ((int)ref_out[i], (int)test_out[i]) << "Buffers differ at index " << i;

@@ -288,7 +288,8 @@ class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
 
     /* Encode the whole buffer in blocks of bool_vec_t. */
     template <std::size_t... Is>
-    static std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> encode_stages(const uint8_t *in, std::index_sequence<Is...>) {
+    static std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> encode_stages(const std::array<uint8_t, K / 8u> &in,
+            std::index_sequence<Is...>) {
         /*
         The first stage uses block operations to expand the buffer into an
         array of bool_vec_t, ready for efficient word-sized operations.
@@ -316,7 +317,7 @@ class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
     Encode the Ith bool_vec_t block using data from the input buffer.
     */
     template <std::size_t I>
-    static bool_vec_t encode_block(const uint8_t *in) {
+    static bool_vec_t encode_block(const std::array<uint8_t, K / 8u> &in) {
         constexpr std::pair<std::size_t, std::size_t> block_extents = Detail::get_range_extents(
             I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, std::index_sequence<Ds...>{});
         using range_indices = typename Detail::OffsetIndexSequence<
@@ -327,14 +328,9 @@ class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
     }
 
     template <std::size_t... Bs, std::size_t... Is>
-    static bool_vec_t encode_block_rows(const uint8_t *in, std::index_sequence<Bs...>, std::index_sequence<Is...>) {
-        bool_vec_t out = 0u;
-
-        int _[] = { (out ^= (in[Is / 8u] & (uint8_t)1u << (7u - (Is % 8u))) ?
-            calculate_row(Bs % (sizeof(bool_vec_t) * 8u)) : 0u, 0)... };
-        (void)_;
-
-        return out;
+    static bool_vec_t encode_block_rows(const std::array<uint8_t, K / 8u> &in, std::index_sequence<Bs...>, std::index_sequence<Is...>) {
+        return (0u ^ ... ^ ((in[Is / 8u] & (uint8_t)1u << (7u - (Is % 8u))) ?
+            calculate_row(Bs % (sizeof(bool_vec_t) * 8u)) : 0u));
     }
 
     /*
@@ -360,7 +356,7 @@ public:
     Encode a full block. Input buffer must be of size K/8 bytes, and output
     buffer must be of size M/8 bytes.
     */
-    static std::array<uint8_t, M / 8u> encode(const uint8_t *in) {
+    static std::array<uint8_t, M / 8u> encode(const std::array<uint8_t, K / 8u> &in) {
         /* Run encoding stages. */
         auto buf_encoded = encode_stages(in, std::make_index_sequence<N / (sizeof(bool_vec_t) * 8u)>{});
 
