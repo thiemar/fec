@@ -23,6 +23,7 @@ SOFTWARE.
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <type_traits>
@@ -400,35 +401,50 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
     /* Decode the whole buffer in log2(N) stages. */
     template <std::size_t S, std::size_t I>
-    static std::array<uint8_t, (std::size_t)1u << S> decode_stages(std::array<int8_t, (std::size_t)1u << S> alpha,
-            std::array<int8_t, K / 8u> decoded) {
-
-        /* Left-traversal. */
-        std::array<uint8_t, ((std::size_t)1u << (S - 1u))> beta_l = decode_stages<S - 1u, I>(alpha, decoded);
-
-        /* Right-traversal. */
-        std::array<uint8_t, ((std::size_t)1u << (S - 1u))> beta_r =
-            decode_stages<S - 1u, I + ((std::size_t)1u << (S - 1u))>(alpha, decoded);
-
+    static std::array<uint8_t, (std::size_t)1u << S> decode_stages(const std::array<int8_t, (std::size_t)1u << S> &alpha,
+            std::array<uint8_t, K / 8u> &decoded) {
         std::array<uint8_t, (std::size_t)1u << S> beta;
 
-        // for (std::size_t i = 0u; i < ; i++) {
+        /* Do special case checks for f-SSCL to reduce computational load. */
 
-        // }
+        /*
+        Special case for leaf nodes, where the systematic codeword is
+        estimated depending on the LLR and whether or not it is a member of
+        the frozen set.
+        */
+        if constexpr (S == 0u) {
+            if constexpr (!Detail::sequence_contains(I, std::index_sequence<Ds...>{})) {
+                /* Estimate the systematic codeword by thresholding the LLR. */
+                beta[0u] = std::signbit(alpha[I]);
+
+                decoded[I / 8u] |= beta[0u] ? ((uint8_t)1u << (I % 8u)) : 0u;
+            } else {
+                beta[0u] = 0u;
+            }
+        } else {
+            /* Left-traversal. */
+            std::array<uint8_t, ((std::size_t)1u << (S - 1u))> beta_l = decode_stages<S - 1u, I>(f_op(alpha), decoded);
+
+            /* Right-traversal. */
+            std::array<uint8_t, ((std::size_t)1u << (S - 1u))> beta_r =
+                decode_stages<S - 1u, I + ((std::size_t)1u << (S - 1u))>(g_op(alpha, beta_l), decoded);
+
+            /* Make bit-decisions. */
+            for (std::size_t i = 0u; i < beta.size() / 2u; i++) {
+                beta[i] = (beta_l[i] + beta_r[i]) % 2u;
+                beta[i + beta.size() / 2u] = beta_r[i];
+            }
+        }
 
         return beta;
     }
 
-    /*
-    Special case for leaf nodes, where the systematic codeword is estimated.
-    */
-
     /* Do the f-operation (min-sum). */
     template <std::size_t I>
-    static std::array<int8_t, I / 2u> f_op(std::array<int8_t, I> in) {
+    static std::array<int8_t, I / 2u> f_op(const std::array<int8_t, I> &alpha) {
         std::array<int8_t, I / 2u> out;
         for (std::size_t i = 0u; i < I / 2u; i++) {
-            // out[i] = ;
+            out[i] = std::copysign(std::min(std::abs(alpha[i]), std::abs(alpha[i + I / 2u])), alpha[i] * alpha[i + I / 2u]);
         }
 
         return out;
@@ -436,10 +452,10 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
     /* Do the g-operation. */
     template <std::size_t I>
-    static std::array<int8_t, I / 2u> g_op(std::array<int8_t, I> in) {
+    static std::array<int8_t, I / 2u> g_op(const std::array<int8_t, I> &alpha, const std::array<uint8_t, I / 2u> &beta) {
         std::array<int8_t, I / 2u> out;
         for (std::size_t i = 0u; i < I / 2u; i++) {
-            // out[i] = ;
+            out[i] = alpha[i + I / 2u] + ((1 - 2 * (int8_t)beta[i]) * alpha[i]);
         }
 
         return out;
@@ -448,25 +464,21 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 public:
     /*
     Decode using the f-SSC algorithm described in [1]. Input buffer must be
-    of size 'Len' bytes, and output buffer must be of size K/8.
+    of size M/8 bytes, and output buffer must be of size K/8.
     */
-    template <std::size_t Len = N / 8u>
-    static std::array<uint8_t, K / 8u> decode(const uint8_t *in) {
-        static_assert(Len * 8u <= N, "Input length must be smaller than or equal to block size");
-
+    static std::array<uint8_t, K / 8u> decode(const std::array<uint8_t, M / 8u> &in) {
         /* Initialise LLRs based on input data. */
         std::array<int8_t, N> alpha;
-        for (std::size_t i = 0u; i < Len * 8u; i++) {
+        for (std::size_t i = 0u; i < M; i++) {
             alpha[i] = in[i / 8u] & ((uint8_t)1u << (7u - (i % 8u))) ? -1 : 1;
         }
 
         /*
-        The remaining (shortened) bytes are implicitly set to zero (one when
-        represented as an LLR).
+        The remaining (shortened) bytes are implicitly set to the maximum
+        positive value for the LLR datatype, to indicate complete certainty
+        as to their value (zero).
         */
-        for (std::size_t i = Len * 8u; i < N; i++) {
-            alpha[i] = 1;
-        }
+        std::fill_n(alpha.begin() + M, N - M, 127);
 
         /* Run decoding stages. */
         std::array<uint8_t, K / 8u> out = {};

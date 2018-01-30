@@ -35,6 +35,7 @@ ADD_EXECUTABLE(benchmark
     ConvolutionalDecoderBenchmark.cpp
     ReedSolomonBenchmark.cpp
     PolarEncoderBenchmark.cpp
+    PolarDecoderBenchmark.cpp
     BenchmarkMain.cpp)
 
 # Create dependency of benchmark on googlebenchmark

@@ -201,6 +201,18 @@ constexpr std::pair<std::size_t, std::size_t> get_range_extents(T L, T U, std::i
     return std::make_pair(start, end);
 }
 
+/* Test whether an integer sequence contains a particular value. */
+template <typename T, T... Is>
+constexpr bool sequence_contains(T val, std::integer_sequence<T, Is...>) {
+    for (T i : { Is... }) {
+        if (i == val) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 }
 
 }
