@@ -399,9 +399,11 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
     static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
     static_assert(L >= 1u, "List length must be at least one");
 
+    using llr_t = int32_t;
+
     /* Decode the whole buffer in log2(N) stages. */
     template <std::size_t S, std::size_t I>
-    static std::array<uint8_t, (std::size_t)1u << S> decode_stages(const std::array<int8_t, (std::size_t)1u << S> &alpha,
+    static std::array<uint8_t, (std::size_t)1u << S> decode_stages(const std::array<llr_t, (std::size_t)1u << S> &alpha,
             std::array<uint8_t, K / 8u> &decoded) {
         std::array<uint8_t, (std::size_t)1u << S> beta;
 
@@ -413,9 +415,9 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
         the frozen set.
         */
         if constexpr (S == 0u) {
-            if constexpr (!Detail::sequence_contains(I, std::index_sequence<Ds...>{})) {
+            if constexpr (Detail::sequence_contains(I, std::index_sequence<Ds...>{})) {
                 /* Estimate the systematic codeword by thresholding the LLR. */
-                beta[0u] = std::signbit(alpha[I]);
+                beta[0u] = std::signbit(alpha[0u]);
 
                 decoded[I / 8u] |= beta[0u] ? ((uint8_t)1u << (I % 8u)) : 0u;
             } else {
@@ -441,8 +443,8 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
     /* Do the f-operation (min-sum). */
     template <std::size_t I>
-    static std::array<int8_t, I / 2u> f_op(const std::array<int8_t, I> &alpha) {
-        std::array<int8_t, I / 2u> out;
+    static std::array<llr_t, I / 2u> f_op(const std::array<llr_t, I> &alpha) {
+        std::array<llr_t, I / 2u> out;
         for (std::size_t i = 0u; i < I / 2u; i++) {
             out[i] = std::copysign(std::min(std::abs(alpha[i]), std::abs(alpha[i + I / 2u])), alpha[i] * alpha[i + I / 2u]);
         }
@@ -452,10 +454,10 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
     /* Do the g-operation. */
     template <std::size_t I>
-    static std::array<int8_t, I / 2u> g_op(const std::array<int8_t, I> &alpha, const std::array<uint8_t, I / 2u> &beta) {
-        std::array<int8_t, I / 2u> out;
+    static std::array<llr_t, I / 2u> g_op(const std::array<llr_t, I> &alpha, const std::array<uint8_t, I / 2u> &beta) {
+        std::array<llr_t, I / 2u> out;
         for (std::size_t i = 0u; i < I / 2u; i++) {
-            out[i] = alpha[i + I / 2u] + ((1 - 2 * (int8_t)beta[i]) * alpha[i]);
+            out[i] = alpha[i + I / 2u] + ((1 - 2 * (llr_t)beta[i]) * alpha[i]);
         }
 
         return out;
@@ -468,7 +470,7 @@ public:
     */
     static std::array<uint8_t, K / 8u> decode(const std::array<uint8_t, M / 8u> &in) {
         /* Initialise LLRs based on input data. */
-        std::array<int8_t, N> alpha;
+        std::array<llr_t, N> alpha;
         for (std::size_t i = 0u; i < M; i++) {
             alpha[i] = in[i / 8u] & ((uint8_t)1u << (7u - (i % 8u))) ? -1 : 1;
         }
