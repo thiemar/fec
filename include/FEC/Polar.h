@@ -403,9 +403,9 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
     /* Decode the whole buffer in log2(N) stages. */
     template <std::size_t S, std::size_t I>
-    static std::array<uint8_t, (std::size_t)1u << S> decode_stages(const std::array<llr_t, (std::size_t)1u << S> &alpha,
+    static std::array<bool, (std::size_t)1u << S> decode_stages(const std::array<llr_t, (std::size_t)1u << S> &alpha,
             std::array<uint8_t, K / 8u> &decoded) {
-        std::array<uint8_t, (std::size_t)1u << S> beta;
+        std::array<bool, (std::size_t)1u << S> beta;
 
         /* Do special case checks for f-SSCL to reduce computational load. */
 
@@ -425,10 +425,10 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
             }
         } else {
             /* Left-traversal. */
-            std::array<uint8_t, ((std::size_t)1u << (S - 1u))> beta_l = decode_stages<S - 1u, I>(f_op(alpha), decoded);
+            std::array<bool, ((std::size_t)1u << (S - 1u))> beta_l = decode_stages<S - 1u, I>(f_op(alpha), decoded);
 
             /* Right-traversal. */
-            std::array<uint8_t, ((std::size_t)1u << (S - 1u))> beta_r =
+            std::array<bool, ((std::size_t)1u << (S - 1u))> beta_r =
                 decode_stages<S - 1u, I + ((std::size_t)1u << (S - 1u))>(g_op(alpha, beta_l), decoded);
 
             /* Make bit-decisions. */
@@ -454,7 +454,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
     /* Do the g-operation. */
     template <std::size_t I>
-    static std::array<llr_t, I / 2u> g_op(const std::array<llr_t, I> &alpha, const std::array<uint8_t, I / 2u> &beta) {
+    static std::array<llr_t, I / 2u> g_op(const std::array<llr_t, I> &alpha, const std::array<bool, I / 2u> &beta) {
         std::array<llr_t, I / 2u> out;
         for (std::size_t i = 0u; i < I / 2u; i++) {
             out[i] = alpha[i + I / 2u] + ((1 - 2 * (llr_t)beta[i]) * alpha[i]);
@@ -480,7 +480,7 @@ public:
         positive value for the LLR datatype, to indicate complete certainty
         as to their value (zero).
         */
-        std::fill_n(alpha.begin() + M, N - M, 127);
+        std::fill_n(alpha.begin() + M, N - M, (llr_t)N);
 
         /* Run decoding stages. */
         std::array<uint8_t, K / 8u> out = {};
