@@ -55,14 +55,11 @@ for i = 1:numel(Eb_N0)
             channel_output_noisy = channel_output + randn(size(channel_output)) / ...
                 sqrt(2*(10^(Eb_N0(i)/10)));
 
-            channel_thresholded = ones(fec_test_params.polar_block_size, 1) * -1000;
-            channel_thresholded(1:fec_test_params.polar_block_size_shortened) = ...
-                round(min(max((channel_output_noisy + 1) / 2, 0), 1));
+            channel_thresholded = round(min(max((channel_output_noisy + 1) / 2, 0), 1));
             
             % Decode the encoded data.
-            decoded_bitsequence = polar_decode(fec_test_params.polar_block_size, ...
-                fec_test_params.polar_data_size, channel_thresholded, frozen);
-            decoded = bi2de(uint8(reshape(decoded_bitsequence, 8, [])'), 'left-msb');
+            decoded = decode_polar(...
+                bi2de(uint8(reshape(channel_thresholded, 8, [])'), 'left-msb'));
             
             if ~isequal(decoded, data)
                 FER_polar(i) = FER_polar(i) + (1/fec_test_params.num_sims);
