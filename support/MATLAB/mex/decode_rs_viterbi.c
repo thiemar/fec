@@ -31,7 +31,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
         correct_rs_primitive_polynomial_8_4_3_2_0, 1, 1, MESSAGE_PARITY_LENGTH);
     
     /* Length of full frame after FEC is applied. */
-    mwSize packet_len = conv_get_encoded_len(MESSAGE_DATA_LENGTH + MESSAGE_PARITY_LENGTH);
+    mwSize packet_len = conv_get_encoded_len();
         
     if(mxGetM(prhs[0]) != packet_len) {
         mexErrMsgIdAndTxt("decode_rs_viterbi:wrongDataLength", "Wrong number of input rows.");
@@ -48,7 +48,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
         uint8_t buf[255];
         
         /* Decode convolutional coding. */
-        conv_decode(&input_data[i*packet_len], packet_len, buf);
+        conv_decode(&input_data[i*packet_len], buf);
         
         /* Decode Reed-Solomon. */
         ssize_t m = correct_reed_solomon_decode(rs_enc, buf,

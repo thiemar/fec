@@ -33,32 +33,42 @@ using ConvolutionalDecoder = Thiemar::Convolutional::PuncturedHardDecisionViterb
 
 using PolarDataIndices = Thiemar::Polar::PolarCodeConstructor<POLAR_BLOCK_SIZE, POLAR_BLOCK_SIZE_SHORTENED, POLAR_DATA_SIZE>::data_index_sequence;
 using PolarEncoder = Thiemar::Polar::PolarEncoder<POLAR_BLOCK_SIZE, POLAR_BLOCK_SIZE_SHORTENED, POLAR_DATA_SIZE, PolarDataIndices>;
+using PolarDecoder = Thiemar::Polar::SuccessiveCancellationListDecoder<POLAR_BLOCK_SIZE, POLAR_BLOCK_SIZE_SHORTENED, POLAR_DATA_SIZE, PolarDataIndices>;
 
 void rs_encode(const uint8_t *data, uint8_t *buf) {
-    uint8_t temp[MESSAGE_DATA_LENGTH+MESSAGE_PARITY_LENGTH] = {};
-    memcpy(temp, data, MESSAGE_DATA_LENGTH);
-    ReedSolomonEncoder::encode<MESSAGE_DATA_LENGTH>(temp);
-    memcpy(buf, temp, MESSAGE_DATA_LENGTH+MESSAGE_PARITY_LENGTH);
+    auto in = Thiemar::Detail::to_array<uint8_t, MESSAGE_DATA_LENGTH+MESSAGE_PARITY_LENGTH>(data);
+    std::fill_n(in.begin() + MESSAGE_DATA_LENGTH, MESSAGE_PARITY_LENGTH, 0u);
+    ReedSolomonEncoder::encode<MESSAGE_DATA_LENGTH>(in);
+    memcpy(buf, in.data(), MESSAGE_DATA_LENGTH+MESSAGE_PARITY_LENGTH);
 }
 
-size_t conv_get_encoded_len(size_t len) {
-    return ConvolutionalEncoder::calculate_output_length(len);
+size_t conv_get_encoded_len() {
+    return ConvolutionalEncoder::calculate_output_length(
+        MESSAGE_DATA_LENGTH + MESSAGE_PARITY_LENGTH);
 }
 
-void conv_encode(const uint8_t *data, size_t len, uint8_t *buf) {
-    ConvolutionalEncoder::encode(data, len, buf);
+void conv_encode(const uint8_t *data, uint8_t *buf) {
+    auto in = Thiemar::Detail::to_array<uint8_t, MESSAGE_DATA_LENGTH + MESSAGE_PARITY_LENGTH>(data);
+    auto out = ConvolutionalEncoder::encode(in);
+    memcpy(buf, out.data(), out.size());
 }
 
-size_t conv_get_decoded_len(size_t len) {
-    return ConvolutionalDecoder::calculate_output_length(len);
-}
 
-void conv_decode(const uint8_t *data, size_t len, uint8_t *buf) {
-    memset(buf, 0u, len);
-    ConvolutionalDecoder::decode(data, len, buf);
+void conv_decode(const uint8_t *data, uint8_t *buf) {
+    auto in = Thiemar::Detail::to_array<uint8_t, ConvolutionalEncoder::calculate_output_length(
+        MESSAGE_DATA_LENGTH + MESSAGE_PARITY_LENGTH)>(data);
+    auto out = ConvolutionalDecoder::decode(in);
+    memcpy(buf, out.data(), out.size());
 }
 
 void polar_encode(const uint8_t *data, uint8_t *buf) {
-    auto out = PolarEncoder::encode(data);
+    auto in = Thiemar::Detail::to_array<uint8_t, POLAR_DATA_SIZE / 8u>(data);
+    auto out = PolarEncoder::encode(in);
+    memcpy(buf, out.data(), out.size());
+}
+
+void polar_decode(const uint8_t *data, uint8_t *buf) {
+    auto in = Thiemar::Detail::to_array<uint8_t, POLAR_BLOCK_SIZE_SHORTENED / 8u>(data);
+    auto out = PolarDecoder::decode(in);
     memcpy(buf, out.data(), out.size());
 }

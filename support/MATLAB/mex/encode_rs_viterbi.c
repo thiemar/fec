@@ -30,7 +30,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
     const uint8_t *input_data = (const uint8_t *)mxGetData(prhs[0]);
     
     /* Length of full frame after FEC is applied. */
-    mwSize packet_len = conv_get_encoded_len(MESSAGE_DATA_LENGTH + MESSAGE_PARITY_LENGTH);
+    mwSize packet_len = conv_get_encoded_len();
     
     /* Allocate output data. */
     plhs[0] = mxCreateNumericMatrix(packet_len, mxGetN(prhs[0]), mxUINT8_CLASS, mxREAL);
@@ -46,6 +46,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
         rs_encode(&input_data[i*MESSAGE_DATA_LENGTH], buf);
         
         /* Apply convolutional coding. */
-        conv_encode(buf, MESSAGE_DATA_LENGTH + MESSAGE_PARITY_LENGTH, &output_data[i*packet_len]);
+        conv_encode(buf, &output_data[i*packet_len]);
     }
 }

@@ -74,4 +74,11 @@ function make_fec_mex(test_params)
     };
 
     mex('-v', cxxflags, ldflags, '-largeArrayDims', includes{:}, sourceFiles{:}, defines{:});
+    
+    sourceFiles = { ...
+        'decode_polar.c' ...
+        ['./build/fec_wrapper/fec_wrapper' obj_ext]
+    };
+
+    mex('-v', cxxflags, ldflags, '-largeArrayDims', includes{:}, sourceFiles{:}, defines{:});
 end
