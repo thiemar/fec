@@ -419,7 +419,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
                 /* Estimate the systematic codeword by thresholding the LLR. */
                 beta[0u] = std::signbit(alpha[0u]);
 
-                decoded[I / 8u] |= beta[0u] ? ((uint8_t)1u << (I % 8u)) : 0u;
+                decoded[I / 8u] |= beta[0u] ? ((uint8_t)1u << (7u - (I % 8u))) : 0u;
             } else {
                 beta[0u] = 0u;
             }
