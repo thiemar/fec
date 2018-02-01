@@ -417,6 +417,8 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
         if constexpr (S == 0u) {
             constexpr std::size_t systematic_idx = Detail::sequence_index(I, std::index_sequence<Ds...>{});
 
+            // printf("%d\n", alpha[0u]);
+
             if constexpr (systematic_idx != N) {
                 /* Make the bit decision by thresholding the LLR. */
                 beta[0u] = std::signbit(alpha[0u]);
@@ -436,7 +438,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
             /* Make bit-decisions. */
             for (std::size_t i = 0u; i < beta.size() / 2u; i++) {
-                beta[i] = (beta_l[i] + beta_r[i]) % 2u;
+                beta[i] = beta_l[i] ^ beta_r[i];
                 beta[i + beta.size() / 2u] = beta_r[i];
             }
         }
