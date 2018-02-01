@@ -415,11 +415,14 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
         the frozen set.
         */
         if constexpr (S == 0u) {
-            if constexpr (Detail::sequence_contains(I, std::index_sequence<Ds...>{})) {
-                /* Estimate the systematic codeword by thresholding the LLR. */
+            constexpr std::size_t systematic_idx = Detail::sequence_index(I, std::index_sequence<Ds...>{});
+
+            if constexpr (systematic_idx != N) {
+                /* Make the bit decision by thresholding the LLR. */
                 beta[0u] = std::signbit(alpha[0u]);
 
-                decoded[I / 8u] |= beta[0u] ? ((uint8_t)1u << (7u - (I % 8u))) : 0u;
+                /* Place the decoded systematic bit in the output buffer. */
+                decoded[systematic_idx / 8u] |= beta[0u] ? ((uint8_t)1u << (7u - (systematic_idx % 8u))) : 0u;
             } else {
                 beta[0u] = 0u;
             }

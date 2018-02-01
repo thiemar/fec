@@ -1,7 +1,7 @@
 % Polar code testbench.
-N = 2048;
-K = 1024;
-M = 1536; % Length of shortened code.
+N = 1024;
+K = 512;
+M = 1024; % Length of shortened code.
 design_snr = 5;
 frozen = polar_construction(N, K, M, 'piecewise_integer', design_snr);
 
