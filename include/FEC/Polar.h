@@ -449,7 +449,8 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
     static std::array<llr_t, I / 2u> f_op(const std::array<llr_t, I> &alpha) {
         std::array<llr_t, I / 2u> out;
         for (std::size_t i = 0u; i < I / 2u; i++) {
-            out[i] = std::copysign(std::min(std::abs(alpha[i]), std::abs(alpha[i + I / 2u])), alpha[i] * alpha[i + I / 2u]);
+            llr_t min_abs = std::min(std::abs(alpha[i]), std::abs(alpha[i + I / 2u]));
+            out[i] = std::signbit(alpha[i] ^ alpha[i + I / 2u]) ? -min_abs : min_abs;
         }
 
         return out;
