@@ -26,6 +26,7 @@ SOFTWARE.
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <limits>
 #include <type_traits>
 #include <tuple>
 #include <utility>
@@ -322,14 +323,15 @@ class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
         constexpr std::pair<std::size_t, std::size_t> block_extents = Detail::get_range_extents(
             I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, std::index_sequence<Ds...>{});
         using range_indices = typename Detail::OffsetIndexSequence<
-            block_extents.first, std::make_index_sequence<block_extents.second - block_extents.first>>::type;
+            (std::ptrdiff_t)block_extents.first, std::make_index_sequence<block_extents.second - block_extents.first>>::type;
         using block_data_indices = decltype(Detail::get_range(std::index_sequence<Ds...>{}, range_indices{}));
 
         return encode_block_rows(in, block_data_indices{}, range_indices{});
     }
 
     template <std::size_t... Bs, std::size_t... Is>
-    static bool_vec_t encode_block_rows(const std::array<uint8_t, K / 8u> &in, std::index_sequence<Bs...>, std::index_sequence<Is...>) {
+    static bool_vec_t encode_block_rows(const std::array<uint8_t, K / 8u> &in,
+            std::index_sequence<Bs...>, std::index_sequence<Is...>) {
         return (0u ^ ... ^ ((in[Is / 8u] & (uint8_t)1u << (7u - (Is % 8u))) ?
             calculate_row(Bs % (sizeof(bool_vec_t) * 8u)) : 0u));
     }
@@ -401,47 +403,70 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
     using llr_t = int32_t;
 
-    /* Decode the whole buffer in log2(N) stages. */
-    template <std::size_t S, std::size_t I>
-    static std::array<bool, (std::size_t)1u << S> decode_stages(const std::array<llr_t, (std::size_t)1u << S> &alpha,
-            std::array<uint8_t, K / 8u> &decoded) {
-        std::array<bool, (std::size_t)1u << S> beta;
+    template<std::size_t Nv, std::size_t... Is>
+    static std::array<bool, Nv> decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha,
+            std::array<uint8_t, K / 8u> &decoded, std::index_sequence<Is...>) {
+        std::array<bool, Nv> beta;
 
         /* Do special case checks for f-SSCL to reduce computational load. */
-
-        /*
-        Special case for leaf nodes, where the systematic codeword is
-        estimated depending on the LLR and whether or not it is a member of
-        the frozen set.
-        */
-        if constexpr (S == 0u) {
-            constexpr std::size_t systematic_idx = Detail::sequence_index(I, std::index_sequence<Ds...>{});
-
-            if constexpr (systematic_idx != K) {
+        if constexpr (std::is_same_v<std::index_sequence<Is...>, std::make_index_sequence<Nv>> && Nv == 1u) {
+            /*
+            If none of the bits are frozen, this is a rate-1 node and we can
+            simply threshold all the LLRs directly.
+            */
+            for (std::size_t i = 0u; i < Nv; i++) {
                 /* Make the bit decision by thresholding the LLR. */
-                beta[0u] = std::signbit(alpha[0u]);
+                beta[i] = std::signbit(alpha[i]);
 
                 /* Place the decoded systematic bit in the output buffer. */
-                decoded[systematic_idx / 8u] |= beta[0u] ? ((uint8_t)1u << (7u - (systematic_idx % 8u))) : 0u;
-            } else {
-                beta[0u] = 0u;
+                decoded[(offset + i) / 8u] |= beta[i] ? ((uint8_t)1u << (7u - ((offset + i) % 8u))) : 0u;
             }
+        } else if constexpr (false) {
+            /* Check for single parity check (SPC) nodes. */
+        } else if constexpr (false) {
+            /* Check for repetition nodes (only leftmost leaf frozen). */
         } else {
             /* Left-traversal. */
-            std::array<bool, ((std::size_t)1u << (S - 1u))> beta_l = decode_stages<S - 1u, I>(f_op(alpha), decoded);
+            constexpr std::pair<std::size_t, std::size_t> block_extents_left = Detail::get_range_extents<std::size_t>(
+                0u, Nv / 2u, std::index_sequence<Is...>{});
+            using range_indices_left = typename Detail::OffsetIndexSequence<
+                (ptrdiff_t)block_extents_left.first,
+                std::make_index_sequence<block_extents_left.second - block_extents_left.first>>::type;
+            using data_indices_left = decltype(Detail::get_range(std::index_sequence<Is...>{}, range_indices_left{}));
+
+            std::array<bool, Nv / 2u> beta_l = decode_stages(offset + block_extents_left.first, f_op(alpha), decoded,
+                data_indices_left{});
 
             /* Right-traversal. */
-            std::array<bool, ((std::size_t)1u << (S - 1u))> beta_r =
-                decode_stages<S - 1u, I + ((std::size_t)1u << (S - 1u))>(g_op(alpha, beta_l), decoded);
+            constexpr std::pair<std::size_t, std::size_t> block_extents_right = Detail::get_range_extents<std::size_t>(
+                Nv / 2u, Nv, std::index_sequence<Is...>{});
+            using range_indices_right = typename Detail::OffsetIndexSequence<
+                (ptrdiff_t)block_extents_right.first,
+                std::make_index_sequence<block_extents_right.second - block_extents_right.first>>::type;
+            using data_indices_right = typename Detail::OffsetIndexSequence<
+                -(ptrdiff_t)Nv / 2, decltype(Detail::get_range(std::index_sequence<Is...>{}, range_indices_right{}))>::type;
+
+            std::array<bool, Nv / 2u> beta_r = decode_stages(offset + block_extents_right.first, g_op(alpha, beta_l), decoded,
+                data_indices_right{});
 
             /* Make bit-decisions. */
-            for (std::size_t i = 0u; i < beta.size() / 2u; i++) {
+            for (std::size_t i = 0u; i < Nv / 2u; i++) {
                 beta[i] = beta_l[i] ^ beta_r[i];
-                beta[i + beta.size() / 2u] = beta_r[i];
+                beta[i + Nv / 2u] = beta_r[i];
             }
         }
 
         return beta;
+    }
+
+    /*
+    If all bits are frozen (i.e. data bit index sequence is empty), this is a
+    rate-0 node.
+    */
+    template<std::size_t Nv>
+    static std::array<bool, Nv> decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha,
+            std::array<uint8_t, K / 8u> &decoded, std::index_sequence<>) {
+        return std::array<bool, Nv>{};
     }
 
     /* Do the f-operation (min-sum). */
@@ -488,7 +513,7 @@ public:
 
         /* Run decoding stages. */
         std::array<uint8_t, K / 8u> out = {};
-        decode_stages<Detail::log2(N), 0u>(alpha, out);
+        decode_stages(0u, alpha, out, std::index_sequence<Ds...>{});
 
         return out;
     }

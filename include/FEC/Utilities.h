@@ -96,9 +96,9 @@ struct DiffIndexSequence<std::index_sequence<Is1...>, std::index_sequence<Is2...
 };
 
 /* Helper class for creating an offset index sequence. */
-template <std::size_t Offset, typename Seq> struct OffsetIndexSequence;
+template <std::ptrdiff_t Offset, typename Seq> struct OffsetIndexSequence;
 
-template <std::size_t Offset, std::size_t... Is>
+template <std::ptrdiff_t Offset, std::size_t... Is>
 struct OffsetIndexSequence<Offset, std::index_sequence<Is...>> {
     using type = std::index_sequence<(Is + Offset)...>;
 };
