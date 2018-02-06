@@ -13,7 +13,9 @@ function data = polar_decode(N, K, encoded, frozen)
     alpha = (-ones(N, 1)*2 .* encoded) + 1; % Initialise LLRs using the input data.
     
     % Recurse down and then back up the tree to get the bit estimates.
-    [decoded, ~] = traverse(n, alpha, frozen);
+    % Use the beta output since the encoder is systematic. Use the u output
+    % for a non-systematic encoder.
+    [~, decoded] = traverse(n, alpha, frozen);
     
     data = decoded(~frozen);
 end

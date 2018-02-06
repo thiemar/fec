@@ -1,5 +1,5 @@
 % Do polar encoding.
-function encoded = polar_encode(N, K, data, frozen)
+function encoded_systematic = polar_encode(N, K, data, frozen)
     assert(log2(N) == round(log2(N)), 'N must be a power of two');
     assert(K <= N, 'k must be smaller than or equal to N');
     assert(isequal(size(data), [K 1]), 'Data must be a column vector of K bits');
@@ -20,4 +20,8 @@ function encoded = polar_encode(N, K, data, frozen)
     end
     
     encoded = mod(u'*F, 2)';
+    
+    % Extra step to do systematic encoding.
+    encoded(frozen) = 0;
+    encoded_systematic = mod(encoded'*F, 2)';
 end
