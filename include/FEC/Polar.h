@@ -296,7 +296,7 @@ class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
         The first stage uses block operations to expand the buffer into an
         array of bool_vec_t, ready for efficient word-sized operations.
         */
-        std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> out = { encode_block<Is>(in)... };
+        std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> non_systematic = { encode_block<Is>(in)... };
 
         /*
         Carry out the rest of the encoding on the expanded buffer using full
@@ -307,12 +307,26 @@ class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
         for (std::size_t i = 0u; i < num_stages; i++) {
             for (std::size_t j = 0u; j < N / (sizeof(bool_vec_t) * 8u); j += (std::size_t)1u << (i + 1u)) {
                 for (std::size_t k = 0u; k < (std::size_t)1u << i; k++) {
-                    out[j + k] ^= out[j + k + ((std::size_t)1u << i)];
+                    non_systematic[j + k] ^= non_systematic[j + k + ((std::size_t)1u << i)];
                 }
             }
         }
 
-        return out;
+        /*
+        Do another round of encoding, setting all frozen bits to zero. This
+        is done to make the output codeword systematic.
+        */
+        std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> systematic = { encode_systematic_block<Is>(non_systematic)... };
+
+        for (std::size_t i = 0u; i < num_stages; i++) {
+            for (std::size_t j = 0u; j < N / (sizeof(bool_vec_t) * 8u); j += (std::size_t)1u << (i + 1u)) {
+                for (std::size_t k = 0u; k < (std::size_t)1u << i; k++) {
+                    systematic[j + k] ^= systematic[j + k + ((std::size_t)1u << i)];
+                }
+            }
+        }
+
+        return systematic;
     }
 
     /*
@@ -334,6 +348,25 @@ class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
             std::index_sequence<Bs...>, std::index_sequence<Is...>) {
         return (0u ^ ... ^ ((in[Is / 8u] & (uint8_t)1u << (7u - (Is % 8u))) ?
             calculate_row(Bs % (sizeof(bool_vec_t) * 8u)) : 0u));
+    }
+
+    template <std::size_t I>
+    static bool_vec_t encode_systematic_block(const std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> &in) {
+        constexpr std::pair<std::size_t, std::size_t> block_extents = Detail::get_range_extents(
+            I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, std::index_sequence<Ds...>{});
+        using range_indices = typename Detail::OffsetIndexSequence<
+            (std::ptrdiff_t)block_extents.first, std::make_index_sequence<block_extents.second - block_extents.first>>::type;
+        using block_data_indices = decltype(Detail::get_range(std::index_sequence<Ds...>{}, range_indices{}));
+
+        return encode_systematic_block_rows(in, block_data_indices{});
+    }
+
+    template <std::size_t... Is>
+    static bool_vec_t encode_systematic_block_rows(const std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> &in,
+            std::index_sequence<Is...>) {
+        return (0u ^ ... ^ ((in[Is / (sizeof(bool_vec_t) * 8u)] &
+            (bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u - 1u) - (Is % (sizeof(bool_vec_t) * 8u)))) ?
+            calculate_row(Is % (sizeof(bool_vec_t) * 8u)) : 0u));
     }
 
     /*
@@ -404,12 +437,11 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
     using llr_t = int32_t;
 
     template<std::size_t Nv, std::size_t... Is>
-    static std::array<bool, Nv> decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha,
-            std::array<uint8_t, K / 8u> &decoded, std::index_sequence<Is...>) {
+    static std::array<bool, Nv> decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::index_sequence<Is...>) {
         std::array<bool, Nv> beta;
 
         /* Do special case checks for f-SSCL to reduce computational load. */
-        if constexpr (std::is_same_v<std::index_sequence<Is...>, std::make_index_sequence<Nv>> && Nv == 1u) {
+        if constexpr (std::is_same_v<std::index_sequence<Is...>, std::make_index_sequence<Nv>>) {
             /*
             If none of the bits are frozen, this is a rate-1 node and we can
             simply threshold all the LLRs directly.
@@ -417,9 +449,6 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
             for (std::size_t i = 0u; i < Nv; i++) {
                 /* Make the bit decision by thresholding the LLR. */
                 beta[i] = std::signbit(alpha[i]);
-
-                /* Place the decoded systematic bit in the output buffer. */
-                decoded[(offset + i) / 8u] |= beta[i] ? ((uint8_t)1u << (7u - ((offset + i) % 8u))) : 0u;
             }
         } else if constexpr (false) {
             /* Check for single parity check (SPC) nodes. */
@@ -434,7 +463,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
                 std::make_index_sequence<block_extents_left.second - block_extents_left.first>>::type;
             using data_indices_left = decltype(Detail::get_range(std::index_sequence<Is...>{}, range_indices_left{}));
 
-            std::array<bool, Nv / 2u> beta_l = decode_stages(offset + block_extents_left.first, f_op(alpha), decoded,
+            std::array<bool, Nv / 2u> beta_l = decode_stages(offset + block_extents_left.first, f_op(alpha),
                 data_indices_left{});
 
             /* Right-traversal. */
@@ -446,7 +475,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
             using data_indices_right = typename Detail::OffsetIndexSequence<
                 -(ptrdiff_t)Nv / 2, decltype(Detail::get_range(std::index_sequence<Is...>{}, range_indices_right{}))>::type;
 
-            std::array<bool, Nv / 2u> beta_r = decode_stages(offset + block_extents_right.first, g_op(alpha, beta_l), decoded,
+            std::array<bool, Nv / 2u> beta_r = decode_stages(offset + block_extents_right.first, g_op(alpha, beta_l),
                 data_indices_right{});
 
             /* Make bit-decisions. */
@@ -464,8 +493,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
     rate-0 node.
     */
     template<std::size_t Nv>
-    static std::array<bool, Nv> decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha,
-            std::array<uint8_t, K / 8u> &decoded, std::index_sequence<>) {
+    static std::array<bool, Nv> decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::index_sequence<>) {
         return std::array<bool, Nv>{};
     }
 
@@ -492,6 +520,15 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
         return out;
     }
 
+    static std::array<uint8_t, K / 8u> pack_output(std::array<bool, N> in) {
+        std::array<uint8_t, K / 8u> out = {};
+        std::size_t out_idx = 0u;
+
+        ((out[out_idx++ / 8u] |= in[Ds] ? (uint8_t)1u << (7u - (out_idx % 8u)) : 0u), ...);
+
+        return out;
+    }
+
 public:
     /*
     Decode using the f-SSC algorithm described in [1]. Input buffer must be
@@ -511,11 +548,8 @@ public:
         */
         std::fill_n(alpha.begin() + M, N - M, (llr_t)N);
 
-        /* Run decoding stages. */
-        std::array<uint8_t, K / 8u> out = {};
-        decode_stages(0u, alpha, out, std::index_sequence<Ds...>{});
-
-        return out;
+        /* Run decoding stages and return packed data. */
+        return pack_output(decode_stages(0u, alpha, std::index_sequence<Ds...>{}));
     }
 };
 
