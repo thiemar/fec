@@ -437,8 +437,8 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
     using llr_t = int32_t;
 
     template<std::size_t Nv, std::size_t... Is>
-    static std::array<bool, Nv> decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::index_sequence<Is...>) {
-        std::array<bool, Nv> beta;
+    static void decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta,
+            std::index_sequence<Is...>) {
 
         /* Do special case checks for f-SSCL to reduce computational load. */
         if constexpr (std::is_same_v<std::index_sequence<Is...>, std::make_index_sequence<Nv>>) {
@@ -448,7 +448,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
             */
             for (std::size_t i = 0u; i < Nv; i++) {
                 /* Make the bit decision by thresholding the LLR. */
-                beta[i] = std::signbit(alpha[i]);
+                beta[offset + i] = std::signbit(alpha[i]);
             }
         } else if constexpr (false) {
             /* Check for single parity check (SPC) nodes. */
@@ -463,8 +463,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
                 std::make_index_sequence<block_extents_left.second - block_extents_left.first>>::type;
             using data_indices_left = decltype(Detail::get_range(std::index_sequence<Is...>{}, range_indices_left{}));
 
-            std::array<bool, Nv / 2u> beta_l = decode_stages(offset + block_extents_left.first, f_op(alpha),
-                data_indices_left{});
+            decode_stages(offset, f_op(alpha), beta, data_indices_left{});
 
             /* Right-traversal. */
             constexpr std::pair<std::size_t, std::size_t> block_extents_right = Detail::get_range_extents<std::size_t>(
@@ -475,17 +474,13 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
             using data_indices_right = typename Detail::OffsetIndexSequence<
                 -(ptrdiff_t)Nv / 2, decltype(Detail::get_range(std::index_sequence<Is...>{}, range_indices_right{}))>::type;
 
-            std::array<bool, Nv / 2u> beta_r = decode_stages(offset + block_extents_right.first, g_op(alpha, beta_l),
-                data_indices_right{});
+            decode_stages(offset + Nv / 2u, g_op(offset, alpha, beta), beta, data_indices_right{});
 
             /* Make bit-decisions. */
             for (std::size_t i = 0u; i < Nv / 2u; i++) {
-                beta[i] = beta_l[i] ^ beta_r[i];
-                beta[i + Nv / 2u] = beta_r[i];
+                beta[offset + i] ^= beta[offset + i + Nv / 2u];
             }
         }
-
-        return beta;
     }
 
     /*
@@ -493,9 +488,8 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
     rate-0 node.
     */
     template<std::size_t Nv>
-    static std::array<bool, Nv> decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::index_sequence<>) {
-        return std::array<bool, Nv>{};
-    }
+    static void decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta,
+        std::index_sequence<>) {}
 
     /* Do the f-operation (min-sum). */
     template <std::size_t I>
@@ -511,10 +505,10 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
     /* Do the g-operation. */
     template <std::size_t I>
-    static std::array<llr_t, I / 2u> g_op(const std::array<llr_t, I> &alpha, const std::array<bool, I / 2u> &beta) {
+    static std::array<llr_t, I / 2u> g_op(std::size_t offset, const std::array<llr_t, I> &alpha, const std::array<bool, N> &beta) {
         std::array<llr_t, I / 2u> out;
         for (std::size_t i = 0u; i < I / 2u; i++) {
-            out[i] = alpha[i + I / 2u] + ((1 - 2 * (llr_t)beta[i]) * alpha[i]);
+            out[i] = alpha[i + I / 2u] + ((1 - 2 * (llr_t)beta[offset + i]) * alpha[i]);
         }
 
         return out;
@@ -549,7 +543,9 @@ public:
         std::fill_n(alpha.begin() + M, N - M, (llr_t)N);
 
         /* Run decoding stages and return packed data. */
-        return pack_output(decode_stages(0u, alpha, std::index_sequence<Ds...>{}));
+        std::array<bool, N> beta = {};
+        decode_stages(0u, alpha, beta, std::index_sequence<Ds...>{});
+        return pack_output(beta);
     }
 };
 
