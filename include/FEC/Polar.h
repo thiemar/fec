@@ -447,10 +447,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
             If none of the bits are frozen, this is a rate-1 node and we can
             simply threshold all the LLRs directly.
             */
-            for (std::size_t i = 0u; i < Nv; i++) {
-                /* Make the bit decision by thresholding the LLR. */
-                beta[offset + i] = std::signbit(alpha[i]);
-            }
+            ((beta[offset + Is] = std::signbit(alpha[Is])), ...);
         } else if constexpr (sizeof...(Is) == Nv - 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == 1u) {
             /*
             If only the first bit is frozen, this is a single parity check
