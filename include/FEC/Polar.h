@@ -451,8 +451,31 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
                 /* Make the bit decision by thresholding the LLR. */
                 beta[offset + i] = std::signbit(alpha[i]);
             }
-        } else if constexpr (false) {
-            /* Check for single parity check (SPC) nodes. */
+        } else if constexpr (sizeof...(Is) == Nv - 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == 1u) {
+            /*
+            If only the first bit is frozen, this is a single parity check
+            (SPC) node.
+            */
+            bool parity = false;
+            llr_t abs_min = std::numeric_limits<llr_t>::max();
+            std::size_t abs_min_idx = 0u;
+            for (std::size_t i = 0u; i < Nv; i++) {
+                /* Make the bit decision by thresholding the LLR. */
+                beta[offset + i] = std::signbit(alpha[i]);
+
+                /* Keep track of the parity. */
+                parity ^= beta[offset + i];
+
+                /* Keep track of the worst bit. */
+                llr_t alpha_abs = std::abs(alpha[i]);
+                if (alpha_abs < abs_min) {
+                    abs_min = alpha_abs;
+                    abs_min_idx = i;
+                }
+            }
+
+            /* Apply the parity to the worst bit. */
+            beta[offset + abs_min_idx] ^= parity;
         } else if constexpr (sizeof...(Is) == 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == Nv - 1u) {
             /*
             If only the last bit is not frozen, this is a repetition node.
