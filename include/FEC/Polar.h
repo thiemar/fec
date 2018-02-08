@@ -448,6 +448,13 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
             simply threshold all the LLRs directly.
             */
             ((beta[offset + Is] = std::signbit(alpha[Is])), ...);
+        } else if constexpr (sizeof...(Is) == 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == Nv - 1u) {
+            /*
+            If only the last bit is not frozen, this is a repetition node.
+            */
+            if (std::signbit(std::accumulate(alpha.begin(), alpha.begin() + Nv, 0))) {
+                std::fill_n(beta.begin() + offset, Nv, true);
+            }
         } else if constexpr (sizeof...(Is) == Nv - 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == 1u) {
             /*
             If only the first bit is frozen, this is a single parity check
@@ -473,13 +480,6 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
             /* Apply the parity to the worst bit. */
             beta[offset + abs_min_idx] ^= parity;
-        } else if constexpr (sizeof...(Is) == 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == Nv - 1u) {
-            /*
-            If only the last bit is not frozen, this is a repetition node.
-            */
-            if (std::signbit(std::accumulate(alpha.begin(), alpha.begin() + Nv, 0))) {
-                std::fill_n(beta.begin() + offset, Nv, true);
-            }
         } else {
             /* Left-traversal. */
             constexpr std::pair<std::size_t, std::size_t> block_extents_left = Detail::get_range_extents<std::size_t>(
