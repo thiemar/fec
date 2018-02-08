@@ -477,7 +477,9 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
             /*
             If only the last bit is not frozen, this is a repetition node.
             */
-            std::fill_n(beta.begin() + offset, Nv, std::signbit(std::accumulate(alpha.begin(), alpha.begin() + Nv, 0)));
+            if (std::signbit(std::accumulate(alpha.begin(), alpha.begin() + Nv, 0))) {
+                std::fill_n(beta.begin() + offset, Nv, true);
+            }
         } else {
             /* Left-traversal. */
             constexpr std::pair<std::size_t, std::size_t> block_extents_left = Detail::get_range_extents<std::size_t>(
