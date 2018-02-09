@@ -460,10 +460,10 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
             If only the first bit is frozen, this is a single parity check
             (SPC) node.
             */
-            bool parity = false;
-            llr_t abs_min = std::numeric_limits<llr_t>::max();
+            bool parity = beta[offset] = std::signbit(alpha[0u]);
+            llr_t abs_min = std::abs(alpha[0u]);
             std::size_t abs_min_idx = 0u;
-            for (std::size_t i = 0u; i < Nv; i++) {
+            for (std::size_t i = 1u; i < Nv; i++) {
                 /* Make the bit decision by thresholding the LLR. */
                 beta[offset + i] = std::signbit(alpha[i]);
 
