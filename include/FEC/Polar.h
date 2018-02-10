@@ -485,39 +485,18 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
             If none of the bits are frozen, this is a rate-1 node and we can
             simply threshold all the LLRs directly.
             */
-            ((beta[offset + Is] = std::signbit(alpha[Is])), ...);
+            rate_1(offset, alpha, beta);
         } else if constexpr (is_rep_node(Nv, std::index_sequence<Is...>{})) {
             /*
             If only the last bit is not frozen, this is a repetition node.
             */
-            if (std::signbit(std::accumulate(alpha.begin(), alpha.begin() + Nv, 0))) {
-                std::fill_n(beta.begin() + offset, Nv, true);
-            }
+            rep(offset, alpha, beta);
         } else if constexpr (is_spc_node(Nv, std::index_sequence<Is...>{})) {
             /*
             If only the first bit is frozen, this is a single parity check
             (SPC) node.
             */
-            bool parity = beta[offset] = std::signbit(alpha[0u]);
-            llr_t abs_min = std::abs(alpha[0u]);
-            std::size_t abs_min_idx = 0u;
-            for (std::size_t i = 1u; i < Nv; i++) {
-                /* Make the bit decision by thresholding the LLR. */
-                beta[offset + i] = std::signbit(alpha[i]);
-
-                /* Keep track of the parity. */
-                parity ^= beta[offset + i];
-
-                /* Keep track of the worst bit. */
-                llr_t alpha_abs = std::abs(alpha[i]);
-                if (alpha_abs < abs_min) {
-                    abs_min = alpha_abs;
-                    abs_min_idx = i;
-                }
-            }
-
-            /* Apply the parity to the worst bit. */
-            beta[offset + abs_min_idx] ^= parity;
+            spc(offset, alpha, beta);
         } else {
             /* Get data indices for the left and right sub-trees. */
             constexpr std::pair<std::size_t, std::size_t> block_extents_left = Detail::get_range_extents(
@@ -641,6 +620,47 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
         for (std::size_t i = 0u; i < I / 2u; i++) {
             beta[offset + i] ^= beta[offset + i + I / 2u];
         }
+    }
+
+    /* Simplified operation for rate-1 nodes. */
+    template <std::size_t I>
+    static void rate_1(std::size_t offset, const std::array<llr_t, I> &alpha, std::array<bool, N> &beta) {
+        for (std::size_t i = 0u; i < I; i++) {
+            beta[offset + i] = std::signbit(alpha[i]);
+        }
+    }
+
+    /* Simplified operation for repetition nodes. */
+    template <std::size_t I>
+    static void rep(std::size_t offset, const std::array<llr_t, I> &alpha, std::array<bool, N> &beta) {
+        if (std::signbit(std::accumulate(alpha.begin(), alpha.begin() + I, 0))) {
+            std::fill_n(beta.begin() + offset, I, true);
+        }
+    }
+
+    /* Simplified operation for SPC nodes. */
+    template <std::size_t I>
+    static void spc(std::size_t offset, const std::array<llr_t, I> &alpha, std::array<bool, N> &beta) {
+        bool parity = beta[offset] = std::signbit(alpha[0u]);
+        llr_t abs_min = std::abs(alpha[0u]);
+        std::size_t abs_min_idx = 0u;
+        for (std::size_t i = 1u; i < I; i++) {
+            /* Make the bit decision by thresholding the LLR. */
+            beta[offset + i] = std::signbit(alpha[i]);
+
+            /* Keep track of the parity. */
+            parity ^= beta[offset + i];
+
+            /* Keep track of the worst bit. */
+            llr_t alpha_abs = std::abs(alpha[i]);
+            if (alpha_abs < abs_min) {
+                abs_min = alpha_abs;
+                abs_min_idx = i;
+            }
+        }
+
+        /* Apply the parity to the worst bit. */
+        beta[offset + abs_min_idx] ^= parity;
     }
 
     static std::array<uint8_t, K / 8u> pack_output(std::array<bool, N> in) {
