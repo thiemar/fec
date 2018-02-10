@@ -432,11 +432,11 @@ static std::array<llr_t, Nv / 2u> f_op_r1(const std::array<llr_t, Nv> &alpha) {
 }
 
 /* Do the g-operation. */
-template <typename llr_t, std::size_t Nv, std::size_t N>
-static std::array<llr_t, Nv / 2u> g_op(std::size_t offset, const std::array<llr_t, Nv> &alpha, const std::array<bool, N> &beta) {
+template <typename llr_t, std::size_t Nv>
+static std::array<llr_t, Nv / 2u> g_op(const std::array<llr_t, Nv> &alpha, const bool *beta) {
     std::array<llr_t, Nv / 2u> out;
     for (std::size_t i = 0u; i < Nv / 2u; i++) {
-        out[i] = alpha[i + Nv / 2u] + ((1 - 2 * (llr_t)beta[offset + i]) * alpha[i]);
+        out[i] = alpha[i + Nv / 2u] + ((1 - 2 * (llr_t)beta[i]) * alpha[i]);
     }
 
     return out;
@@ -465,41 +465,41 @@ static std::array<llr_t, Nv / 2u> g_op_neg(const std::array<llr_t, Nv> &alpha) {
 }
 
 /* Do the h-operation. */
-template <std::size_t Nv, std::size_t N>
-static void h_op(std::size_t offset, std::array<bool, N> &beta) {
+template <std::size_t Nv>
+static void h_op(bool *beta) {
     for (std::size_t i = 0u; i < Nv / 2u; i++) {
-        beta[offset + i] ^= beta[offset + i + Nv / 2u];
+        beta[i] ^= beta[i + Nv / 2u];
     }
 }
 
 /* Simplified operation for rate-1 nodes. */
-template <typename llr_t, std::size_t Nv, std::size_t N>
-static void rate_1(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta) {
+template <typename llr_t, std::size_t Nv>
+static void rate_1(const std::array<llr_t, Nv> &alpha, bool *beta) {
     for (std::size_t i = 0u; i < Nv; i++) {
-        beta[offset + i] = std::signbit(alpha[i]);
+        beta[i] = std::signbit(alpha[i]);
     }
 }
 
 /* Simplified operation for repetition nodes. */
-template <typename llr_t, std::size_t Nv, std::size_t N>
-static void rep(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta) {
+template <typename llr_t, std::size_t Nv>
+static void rep(const std::array<llr_t, Nv> &alpha, bool *beta) {
     if (std::signbit(std::accumulate(alpha.begin(), alpha.begin() + Nv, 0))) {
-        std::fill_n(beta.begin() + offset, Nv, true);
+        std::fill_n(beta, Nv, true);
     }
 }
 
 /* Simplified operation for SPC nodes. */
-template <typename llr_t, std::size_t Nv, std::size_t N>
-static void spc(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta) {
-    bool parity = beta[offset] = std::signbit(alpha[0u]);
+template <typename llr_t, std::size_t Nv>
+static void spc(const std::array<llr_t, Nv> &alpha, bool *beta) {
+    bool parity = beta[0u] = std::signbit(alpha[0u]);
     llr_t abs_min = std::abs(alpha[0u]);
     std::size_t abs_min_idx = 0u;
     for (std::size_t i = 1u; i < Nv; i++) {
         /* Make the bit decision by thresholding the LLR. */
-        beta[offset + i] = std::signbit(alpha[i]);
+        beta[i] = std::signbit(alpha[i]);
 
         /* Keep track of the parity. */
-        parity ^= beta[offset + i];
+        parity ^= beta[i];
 
         /* Keep track of the worst bit. */
         llr_t alpha_abs = std::abs(alpha[i]);
@@ -510,7 +510,7 @@ static void spc(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::arr
     }
 
     /* Apply the parity to the worst bit. */
-    beta[offset + abs_min_idx] ^= parity;
+    beta[abs_min_idx] ^= parity;
 }
 
 }
@@ -586,7 +586,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
     }
 
     template <std::size_t Nv, std::size_t... Is>
-    static void decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta,
+    static void decode_stages(const std::array<llr_t, Nv> &alpha, bool *beta,
             std::index_sequence<Is...>) {
         /* Do special case checks for f-SSCL to reduce computational load. */
         if constexpr (is_rate_1_node(Nv, std::index_sequence<Is...>{})) {
@@ -594,18 +594,18 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
             If none of the bits are frozen, this is a rate-1 node and we can
             simply threshold all the LLRs directly.
             */
-            Decoder::Operations::rate_1(offset, alpha, beta);
+            Decoder::Operations::rate_1(alpha, beta);
         } else if constexpr (is_rep_node(Nv, std::index_sequence<Is...>{})) {
             /*
             If only the last bit is not frozen, this is a repetition node.
             */
-            Decoder::Operations::rep(offset, alpha, beta);
+            Decoder::Operations::rep(alpha, beta);
         } else if constexpr (is_spc_node(Nv, std::index_sequence<Is...>{})) {
             /*
             If only the first bit is frozen, this is a single parity check
             (SPC) node.
             */
-            Decoder::Operations::spc(offset, alpha, beta);
+            Decoder::Operations::spc(alpha, beta);
         } else {
             /* Get data indices for the left and right sub-trees. */
             constexpr std::pair<std::size_t, std::size_t> block_extents_left = Detail::get_range_extents(
@@ -630,10 +630,10 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
                 /* If left is rate-0, then no f-operation is required. */
             } else if constexpr (is_rate_1_node(Nv, data_indices_left{})) {
                 /* If left is rate-1, then f-operation is simplified. */
-                decode_stages(offset, Decoder::Operations::f_op_r1(alpha), beta, data_indices_left{});
+                decode_stages(Decoder::Operations::f_op_r1(alpha), beta, data_indices_left{});
             } else {
                 /* Nominal case. */
-                decode_stages(offset, Decoder::Operations::f_op(alpha), beta, data_indices_left{});
+                decode_stages(Decoder::Operations::f_op(alpha), beta, data_indices_left{});
             }
 
             if constexpr (is_rate_0_node(data_indices_right{})) {
@@ -644,27 +644,26 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
                 /*
                 If left was rate-0, a specialised g-operation can be used.
                 */
-                decode_stages(offset + Nv / 2u, Decoder::Operations::g_op_pos(alpha), beta, data_indices_right{});
+                decode_stages(Decoder::Operations::g_op_pos(alpha), &beta[Nv / 2u], data_indices_right{});
             } else if constexpr (is_rep_node(Nv, data_indices_left{})) {
                 /*
                 If left was a repetition node, a specialised g-operation can
                 be used.
                 */
-                decode_stages(offset + Nv / 2u,
-                    beta[offset] ? Decoder::Operations::g_op_neg(alpha) : Decoder::Operations::g_op_pos(alpha),
-                    beta, data_indices_right{});
+                decode_stages(beta[0u] ? Decoder::Operations::g_op_neg(alpha) : Decoder::Operations::g_op_pos(alpha),
+                    &beta[Nv / 2u], data_indices_right{});
             } else {
                 /* Nominal case. */
-                decode_stages(offset + Nv / 2u, Decoder::Operations::g_op(offset, alpha, beta), beta, data_indices_right{});
+                decode_stages(Decoder::Operations::g_op(alpha, beta), &beta[Nv / 2u], data_indices_right{});
             }
 
             /* Make bit-decisions. */
             if constexpr (is_rate_0_node(data_indices_right{})) {
                 /* No h-operation required if right node is rate-0. */
             } else if constexpr (is_rate_0_node(data_indices_left{})) {
-                std::copy_n(beta.begin() + offset + Nv / 2u, Nv / 2u, beta.begin() + offset);
+                std::copy_n(beta + Nv / 2u, Nv / 2u, beta);
             } else {
-                Decoder::Operations::h_op<Nv>(offset, beta);
+                Decoder::Operations::h_op<Nv>(beta);
             }
         }
     }
@@ -699,7 +698,7 @@ public:
 
         /* Run decoding stages and return packed data. */
         std::array<bool, N> beta = {};
-        decode_stages(0u, alpha, beta, std::index_sequence<Ds...>{});
+        decode_stages(alpha, beta.data(), std::index_sequence<Ds...>{});
         return pack_output(beta);
     }
 };
