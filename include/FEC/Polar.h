@@ -574,9 +574,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
             } else if constexpr (is_rate_0_node(data_indices_left{})) {
                 std::copy_n(beta.begin() + offset + Nv / 2u, Nv / 2u, beta.begin() + offset);
             } else {
-                for (std::size_t i = 0u; i < Nv / 2u; i++) {
-                    beta[offset + i] ^= beta[offset + i + Nv / 2u];
-                }
+                h_op<Nv>(offset, beta);
             }
         }
     }
@@ -635,6 +633,14 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
         }
 
         return out;
+    }
+
+    /* Do the h-operation. */
+    template <std::size_t I>
+    static void h_op(std::size_t offset, std::array<bool, N> &beta) {
+        for (std::size_t i = 0u; i < I / 2u; i++) {
+            beta[offset + i] ^= beta[offset + i + I / 2u];
+        }
     }
 
     static std::array<uint8_t, K / 8u> pack_output(std::array<bool, N> in) {
