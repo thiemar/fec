@@ -29,10 +29,10 @@ void PolarDecoderBlockSize1024_Decode(benchmark::State& state) {
 
 BENCHMARK(PolarDecoderBlockSize1024_Decode);
 
-void PolarDecoderBlockSize768_Decode(benchmark::State& state) {
-    constexpr std::size_t N = 1024u;
-    constexpr std::size_t M = 768u;
-    constexpr std::size_t K = 512u;
+void PolarDecoderBlockSize1536_Decode(benchmark::State& state) {
+    constexpr std::size_t N = 2048u;
+    constexpr std::size_t M = 1536u;
+    constexpr std::size_t K = 768u;
     using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>::data_index_sequence;
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
     using TestDecoder = Thiemar::Polar::SuccessiveCancellationListDecoder<N, M, K, TestDataIndices>;
@@ -54,4 +54,4 @@ void PolarDecoderBlockSize768_Decode(benchmark::State& state) {
     }
 }
 
-BENCHMARK(PolarDecoderBlockSize768_Decode);
+BENCHMARK(PolarDecoderBlockSize1536_Decode);
