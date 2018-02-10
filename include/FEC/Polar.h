@@ -543,8 +543,23 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
                 decode_stages(offset, f_op(alpha), beta, data_indices_left{});
             }
 
-            /* If right is rate-0, then no g- or h-operation is required. */
-            if constexpr (!is_rate_0_node(data_indices_right{})) {
+            if constexpr (is_rate_0_node(data_indices_right{})) {
+                /*
+                If right is rate-0, then no g- or h-operation is required.
+                */
+            } else if constexpr (is_rate_0_node(data_indices_left{})) {
+                /*
+                If left was rate-0, a specialised g-operation can be used.
+                */
+                decode_stages(offset + Nv / 2u, g_op_pos(alpha), beta, data_indices_right{});
+            } else if constexpr (is_rep_node(Nv, data_indices_left{})) {
+                /*
+                If left was a repetition node, a specialised g-operation can
+                be used.
+                */
+                decode_stages(offset + Nv / 2u, beta[offset] ? g_op_neg(alpha) : g_op_pos(alpha), beta, data_indices_right{});
+            } else {
+                /* Nominal case. */
                 decode_stages(offset + Nv / 2u, g_op(offset, alpha, beta), beta, data_indices_right{});
             }
 
@@ -595,12 +610,23 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
         return out;
     }
 
-    /* Overload of the g-operation for the case where beta is zero. */
+    /* Overload of the g-operation for the case where beta is all zeros. */
     template <std::size_t I>
-    static std::array<llr_t, I / 2u> g_op(const std::array<llr_t, I> &alpha) {
+    static std::array<llr_t, I / 2u> g_op_pos(const std::array<llr_t, I> &alpha) {
         std::array<llr_t, I / 2u> out;
         for (std::size_t i = 0u; i < I / 2u; i++) {
             out[i] = alpha[i + I / 2u] + alpha[i];
+        }
+
+        return out;
+    }
+
+    /* Overload of the g-operation for the case where beta is all ones. */
+    template <std::size_t I>
+    static std::array<llr_t, I / 2u> g_op_neg(const std::array<llr_t, I> &alpha) {
+        std::array<llr_t, I / 2u> out;
+        for (std::size_t i = 0u; i < I / 2u; i++) {
+            out[i] = alpha[i + I / 2u] - alpha[i];
         }
 
         return out;
