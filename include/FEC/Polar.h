@@ -422,11 +422,11 @@ The algorithm used is the f-SSCL algorithm (fast simplified successive
 cancellation list) described in the following papers:
 [1] https://arxiv.org/pdf/1701.08126.pdf
 */
-template <std::size_t N, std::size_t M, std::size_t K, typename DataIndices, std::size_t L = 1u>
+template <std::size_t N, std::size_t M, std::size_t K, typename DataIndices, typename llr_t = int32_t, std::size_t L = 1u>
 class SuccessiveCancellationListDecoder;
 
-template <std::size_t N, std::size_t M, std::size_t K, std::size_t... Ds, std::size_t L>
-class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> {
+template <std::size_t N, std::size_t M, std::size_t K, std::size_t... Ds, typename llr_t, std::size_t L>
+class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr_t, L> {
     static_assert(N >= 8u && Detail::calculate_hamming_weight(N) == 1u, "Block size must be a power of two and a multiple of 8");
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
@@ -434,8 +434,6 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
     static_assert(M <= N && M >= K, "Number of information bits must be between number of information bits and block size");
     static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
     static_assert(L >= 1u, "List length must be at least one");
-
-    using llr_t = int32_t;
 
     /* Test to see if a node is rate zero (all frozen bits). */
     template <std::size_t... Is>
