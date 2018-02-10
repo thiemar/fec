@@ -437,25 +437,58 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
 
     using llr_t = int32_t;
 
-    template<std::size_t Nv, std::size_t... Is>
+    /* Test to see if a node is rate zero (all frozen bits). */
+    template <std::size_t... Is>
+    static constexpr bool is_rate_0_node(std::index_sequence<Is...>) {
+        return false;
+    }
+
+    static constexpr bool is_rate_0_node(std::index_sequence<>) {
+        return true;
+    }
+
+    /* Test to see if a node is rate one (all data bits). */
+    template <std::size_t... Is>
+    static constexpr bool is_rate_1_node(std::size_t Nv, std::index_sequence<Is...>) {
+        return sizeof...(Is) == Nv;
+    }
+
+    /*
+    Test to see if a node is a repetition node (only last bit not frozen).
+    */
+    template <std::size_t... Is>
+    static constexpr bool is_rep_node(std::size_t Nv, std::index_sequence<Is...>) {
+        return sizeof...(Is) == 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == Nv - 1u;
+    }
+
+    /*
+    Test to see if a node is a single parity check (SPC) node (only first bit
+    frozen).
+    */
+    template <std::size_t... Is>
+    static constexpr bool is_spc_node(std::size_t Nv, std::index_sequence<Is...>) {
+        return sizeof...(Is) == Nv - 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == 1u;
+    }
+
+    template <std::size_t Nv, std::size_t... Is>
     static void decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta,
             std::index_sequence<Is...>) {
 
         /* Do special case checks for f-SSCL to reduce computational load. */
-        if constexpr (std::is_same_v<std::index_sequence<Is...>, std::make_index_sequence<Nv>>) {
+        if constexpr (is_rate_1_node(Nv, std::index_sequence<Is...>{})) {
             /*
             If none of the bits are frozen, this is a rate-1 node and we can
             simply threshold all the LLRs directly.
             */
             ((beta[offset + Is] = std::signbit(alpha[Is])), ...);
-        } else if constexpr (sizeof...(Is) == 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == Nv - 1u) {
+        } else if constexpr (is_rep_node(Nv, std::index_sequence<Is...>{})) {
             /*
             If only the last bit is not frozen, this is a repetition node.
             */
             if (std::signbit(std::accumulate(alpha.begin(), alpha.begin() + Nv, 0))) {
                 std::fill_n(beta.begin() + offset, Nv, true);
             }
-        } else if constexpr (sizeof...(Is) == Nv - 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == 1u) {
+        } else if constexpr (is_spc_node(Nv, std::index_sequence<Is...>{})) {
             /*
             If only the first bit is frozen, this is a single parity check
             (SPC) node.
@@ -481,41 +514,52 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
             /* Apply the parity to the worst bit. */
             beta[offset + abs_min_idx] ^= parity;
         } else {
-            /* Left-traversal. */
-            constexpr std::pair<std::size_t, std::size_t> block_extents_left = Detail::get_range_extents<std::size_t>(
-                0u, Nv / 2u, std::index_sequence<Is...>{});
+            /* Get data indices for the left and right sub-trees. */
+            constexpr std::pair<std::size_t, std::size_t> block_extents_left = Detail::get_range_extents(
+                (std::size_t)0u, (std::size_t)Nv / 2u, std::index_sequence<Is...>{});
             using range_indices_left = typename Detail::OffsetIndexSequence<
                 (ptrdiff_t)block_extents_left.first,
                 std::make_index_sequence<block_extents_left.second - block_extents_left.first>>::type;
             using data_indices_left = decltype(Detail::get_range(std::index_sequence<Is...>{}, range_indices_left{}));
 
-            decode_stages(offset, f_op(alpha), beta, data_indices_left{});
-
-            /* Right-traversal. */
-            constexpr std::pair<std::size_t, std::size_t> block_extents_right = Detail::get_range_extents<std::size_t>(
-                Nv / 2u, Nv, std::index_sequence<Is...>{});
+            constexpr std::pair<std::size_t, std::size_t> block_extents_right = Detail::get_range_extents(
+                (std::size_t)Nv / (std::size_t)2u, Nv, std::index_sequence<Is...>{});
             using range_indices_right = typename Detail::OffsetIndexSequence<
                 (ptrdiff_t)block_extents_right.first,
                 std::make_index_sequence<block_extents_right.second - block_extents_right.first>>::type;
             using data_indices_right = typename Detail::OffsetIndexSequence<
                 -(ptrdiff_t)Nv / 2, decltype(Detail::get_range(std::index_sequence<Is...>{}, range_indices_right{}))>::type;
 
-            decode_stages(offset + Nv / 2u, g_op(offset, alpha, beta), beta, data_indices_right{});
+            /*
+            Execute left and right subtrees, with optimisations where possible.
+            */
+            if constexpr (is_rate_0_node(data_indices_left{})) {
+                /* If left is rate-0, then no f-operation is required. */
+            } else if constexpr (is_rate_1_node(Nv, data_indices_left{})) {
+                /* If left is rate-1, then f-operation is simplified. */
+                decode_stages(offset, f_op_r1(alpha), beta, data_indices_left{});
+            } else {
+                /* Nominal case. */
+                decode_stages(offset, f_op(alpha), beta, data_indices_left{});
+            }
+
+            /* If right is rate-0, then no g- or h-operation is required. */
+            if constexpr (!is_rate_0_node(data_indices_right{})) {
+                decode_stages(offset + Nv / 2u, g_op(offset, alpha, beta), beta, data_indices_right{});
+            }
 
             /* Make bit-decisions. */
-            for (std::size_t i = 0u; i < Nv / 2u; i++) {
-                beta[offset + i] ^= beta[offset + i + Nv / 2u];
+            if constexpr (is_rate_0_node(data_indices_right{})) {
+                /* No h-operation required if right node is rate-0. */
+            } else if constexpr (is_rate_0_node(data_indices_left{})) {
+                std::copy_n(beta.begin() + offset + Nv / 2u, Nv / 2u, beta.begin() + offset);
+            } else {
+                for (std::size_t i = 0u; i < Nv / 2u; i++) {
+                    beta[offset + i] ^= beta[offset + i + Nv / 2u];
+                }
             }
         }
     }
-
-    /*
-    If all bits are frozen (i.e. data bit index sequence is empty), this is a
-    rate-0 node.
-    */
-    template<std::size_t Nv>
-    static void decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta,
-        std::index_sequence<>) {}
 
     /* Do the f-operation (min-sum). */
     template <std::size_t I>
@@ -529,12 +573,34 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, L> 
         return out;
     }
 
+    /* Simplification of f-operation when only the sign is needed. */
+    template <std::size_t I>
+    static std::array<llr_t, I / 2u> f_op_r1(const std::array<llr_t, I> &alpha) {
+        std::array<llr_t, I / 2u> out;
+        for (std::size_t i = 0u; i < I / 2u; i++) {
+            out[i] = std::signbit(alpha[i] ^ alpha[i + I / 2u]);
+        }
+
+        return out;
+    }
+
     /* Do the g-operation. */
     template <std::size_t I>
     static std::array<llr_t, I / 2u> g_op(std::size_t offset, const std::array<llr_t, I> &alpha, const std::array<bool, N> &beta) {
         std::array<llr_t, I / 2u> out;
         for (std::size_t i = 0u; i < I / 2u; i++) {
             out[i] = alpha[i + I / 2u] + ((1 - 2 * (llr_t)beta[offset + i]) * alpha[i]);
+        }
+
+        return out;
+    }
+
+    /* Overload of the g-operation for the case where beta is zero. */
+    template <std::size_t I>
+    static std::array<llr_t, I / 2u> g_op(const std::array<llr_t, I> &alpha) {
+        std::array<llr_t, I / 2u> out;
+        for (std::size_t i = 0u; i < I / 2u; i++) {
+            out[i] = alpha[i + I / 2u] + alpha[i];
         }
 
         return out;

@@ -84,6 +84,11 @@ constexpr auto get_range(std::integer_sequence<T, I...>, std::index_sequence<N..
     return std::integer_sequence<T, std::get<N>(std::array<T, sizeof...(I)>{ I... })...>{};
 }
 
+template <typename T, T... I>
+constexpr auto get_range(std::integer_sequence<T, I...>, std::index_sequence<>) {
+    return std::integer_sequence<T>{};
+}
+
 /*
 Helper class for calculating the difference between the elements of two index
 sequences.
