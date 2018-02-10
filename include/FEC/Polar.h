@@ -406,6 +406,115 @@ public:
     }
 };
 
+namespace Decoder::Operations {
+
+/* Do the f-operation (min-sum). */
+template <typename llr_t, std::size_t Nv>
+static std::array<llr_t, Nv / 2u> f_op(const std::array<llr_t, Nv> &alpha) {
+    std::array<llr_t, Nv / 2u> out;
+    for (std::size_t i = 0u; i < Nv / 2u; i++) {
+        llr_t min_abs = std::min(std::abs(alpha[i]), std::abs(alpha[i + Nv / 2u]));
+        out[i] = std::signbit(alpha[i] ^ alpha[i + Nv / 2u]) ? -min_abs : min_abs;
+    }
+
+    return out;
+}
+
+/* Simplification of f-operation when only the sign is needed. */
+template <typename llr_t, std::size_t Nv>
+static std::array<llr_t, Nv / 2u> f_op_r1(const std::array<llr_t, Nv> &alpha) {
+    std::array<llr_t, Nv / 2u> out;
+    for (std::size_t i = 0u; i < Nv / 2u; i++) {
+        out[i] = std::signbit(alpha[i] ^ alpha[i + Nv / 2u]);
+    }
+
+    return out;
+}
+
+/* Do the g-operation. */
+template <typename llr_t, std::size_t Nv, std::size_t N>
+static std::array<llr_t, Nv / 2u> g_op(std::size_t offset, const std::array<llr_t, Nv> &alpha, const std::array<bool, N> &beta) {
+    std::array<llr_t, Nv / 2u> out;
+    for (std::size_t i = 0u; i < Nv / 2u; i++) {
+        out[i] = alpha[i + Nv / 2u] + ((1 - 2 * (llr_t)beta[offset + i]) * alpha[i]);
+    }
+
+    return out;
+}
+
+/* Overload of the g-operation for the case where beta is all zeros. */
+template <typename llr_t, std::size_t Nv>
+static std::array<llr_t, Nv / 2u> g_op_pos(const std::array<llr_t, Nv> &alpha) {
+    std::array<llr_t, Nv / 2u> out;
+    for (std::size_t i = 0u; i < Nv / 2u; i++) {
+        out[i] = alpha[i + Nv / 2u] + alpha[i];
+    }
+
+    return out;
+}
+
+/* Overload of the g-operation for the case where beta is all ones. */
+template <typename llr_t, std::size_t Nv>
+static std::array<llr_t, Nv / 2u> g_op_neg(const std::array<llr_t, Nv> &alpha) {
+    std::array<llr_t, Nv / 2u> out;
+    for (std::size_t i = 0u; i < Nv / 2u; i++) {
+        out[i] = alpha[i + Nv / 2u] - alpha[i];
+    }
+
+    return out;
+}
+
+/* Do the h-operation. */
+template <std::size_t Nv, std::size_t N>
+static void h_op(std::size_t offset, std::array<bool, N> &beta) {
+    for (std::size_t i = 0u; i < Nv / 2u; i++) {
+        beta[offset + i] ^= beta[offset + i + Nv / 2u];
+    }
+}
+
+/* Simplified operation for rate-1 nodes. */
+template <typename llr_t, std::size_t Nv, std::size_t N>
+static void rate_1(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta) {
+    for (std::size_t i = 0u; i < Nv; i++) {
+        beta[offset + i] = std::signbit(alpha[i]);
+    }
+}
+
+/* Simplified operation for repetition nodes. */
+template <typename llr_t, std::size_t Nv, std::size_t N>
+static void rep(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta) {
+    if (std::signbit(std::accumulate(alpha.begin(), alpha.begin() + Nv, 0))) {
+        std::fill_n(beta.begin() + offset, Nv, true);
+    }
+}
+
+/* Simplified operation for SPC nodes. */
+template <typename llr_t, std::size_t Nv, std::size_t N>
+static void spc(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta) {
+    bool parity = beta[offset] = std::signbit(alpha[0u]);
+    llr_t abs_min = std::abs(alpha[0u]);
+    std::size_t abs_min_idx = 0u;
+    for (std::size_t i = 1u; i < Nv; i++) {
+        /* Make the bit decision by thresholding the LLR. */
+        beta[offset + i] = std::signbit(alpha[i]);
+
+        /* Keep track of the parity. */
+        parity ^= beta[offset + i];
+
+        /* Keep track of the worst bit. */
+        llr_t alpha_abs = std::abs(alpha[i]);
+        if (alpha_abs < abs_min) {
+            abs_min = alpha_abs;
+            abs_min_idx = i;
+        }
+    }
+
+    /* Apply the parity to the worst bit. */
+    beta[offset + abs_min_idx] ^= parity;
+}
+
+}
+
 /*
 Successive cancellation list decoder with a block size of N (must be a power
 of two) and K information bits (must be smaller than or equal to N). The
@@ -485,18 +594,18 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
             If none of the bits are frozen, this is a rate-1 node and we can
             simply threshold all the LLRs directly.
             */
-            rate_1(offset, alpha, beta);
+            Decoder::Operations::rate_1(offset, alpha, beta);
         } else if constexpr (is_rep_node(Nv, std::index_sequence<Is...>{})) {
             /*
             If only the last bit is not frozen, this is a repetition node.
             */
-            rep(offset, alpha, beta);
+            Decoder::Operations::rep(offset, alpha, beta);
         } else if constexpr (is_spc_node(Nv, std::index_sequence<Is...>{})) {
             /*
             If only the first bit is frozen, this is a single parity check
             (SPC) node.
             */
-            spc(offset, alpha, beta);
+            Decoder::Operations::spc(offset, alpha, beta);
         } else {
             /* Get data indices for the left and right sub-trees. */
             constexpr std::pair<std::size_t, std::size_t> block_extents_left = Detail::get_range_extents(
@@ -521,10 +630,10 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
                 /* If left is rate-0, then no f-operation is required. */
             } else if constexpr (is_rate_1_node(Nv, data_indices_left{})) {
                 /* If left is rate-1, then f-operation is simplified. */
-                decode_stages(offset, f_op_r1(alpha), beta, data_indices_left{});
+                decode_stages(offset, Decoder::Operations::f_op_r1(alpha), beta, data_indices_left{});
             } else {
                 /* Nominal case. */
-                decode_stages(offset, f_op(alpha), beta, data_indices_left{});
+                decode_stages(offset, Decoder::Operations::f_op(alpha), beta, data_indices_left{});
             }
 
             if constexpr (is_rate_0_node(data_indices_right{})) {
@@ -535,16 +644,18 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
                 /*
                 If left was rate-0, a specialised g-operation can be used.
                 */
-                decode_stages(offset + Nv / 2u, g_op_pos(alpha), beta, data_indices_right{});
+                decode_stages(offset + Nv / 2u, Decoder::Operations::g_op_pos(alpha), beta, data_indices_right{});
             } else if constexpr (is_rep_node(Nv, data_indices_left{})) {
                 /*
                 If left was a repetition node, a specialised g-operation can
                 be used.
                 */
-                decode_stages(offset + Nv / 2u, beta[offset] ? g_op_neg(alpha) : g_op_pos(alpha), beta, data_indices_right{});
+                decode_stages(offset + Nv / 2u,
+                    beta[offset] ? Decoder::Operations::g_op_neg(alpha) : Decoder::Operations::g_op_pos(alpha),
+                    beta, data_indices_right{});
             } else {
                 /* Nominal case. */
-                decode_stages(offset + Nv / 2u, g_op(offset, alpha, beta), beta, data_indices_right{});
+                decode_stages(offset + Nv / 2u, Decoder::Operations::g_op(offset, alpha, beta), beta, data_indices_right{});
             }
 
             /* Make bit-decisions. */
@@ -553,114 +664,9 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
             } else if constexpr (is_rate_0_node(data_indices_left{})) {
                 std::copy_n(beta.begin() + offset + Nv / 2u, Nv / 2u, beta.begin() + offset);
             } else {
-                h_op<Nv>(offset, beta);
+                Decoder::Operations::h_op<Nv>(offset, beta);
             }
         }
-    }
-
-    /* Do the f-operation (min-sum). */
-    template <std::size_t I>
-    static std::array<llr_t, I / 2u> f_op(const std::array<llr_t, I> &alpha) {
-        std::array<llr_t, I / 2u> out;
-        for (std::size_t i = 0u; i < I / 2u; i++) {
-            llr_t min_abs = std::min(std::abs(alpha[i]), std::abs(alpha[i + I / 2u]));
-            out[i] = std::signbit(alpha[i] ^ alpha[i + I / 2u]) ? -min_abs : min_abs;
-        }
-
-        return out;
-    }
-
-    /* Simplification of f-operation when only the sign is needed. */
-    template <std::size_t I>
-    static std::array<llr_t, I / 2u> f_op_r1(const std::array<llr_t, I> &alpha) {
-        std::array<llr_t, I / 2u> out;
-        for (std::size_t i = 0u; i < I / 2u; i++) {
-            out[i] = std::signbit(alpha[i] ^ alpha[i + I / 2u]);
-        }
-
-        return out;
-    }
-
-    /* Do the g-operation. */
-    template <std::size_t I>
-    static std::array<llr_t, I / 2u> g_op(std::size_t offset, const std::array<llr_t, I> &alpha, const std::array<bool, N> &beta) {
-        std::array<llr_t, I / 2u> out;
-        for (std::size_t i = 0u; i < I / 2u; i++) {
-            out[i] = alpha[i + I / 2u] + ((1 - 2 * (llr_t)beta[offset + i]) * alpha[i]);
-        }
-
-        return out;
-    }
-
-    /* Overload of the g-operation for the case where beta is all zeros. */
-    template <std::size_t I>
-    static std::array<llr_t, I / 2u> g_op_pos(const std::array<llr_t, I> &alpha) {
-        std::array<llr_t, I / 2u> out;
-        for (std::size_t i = 0u; i < I / 2u; i++) {
-            out[i] = alpha[i + I / 2u] + alpha[i];
-        }
-
-        return out;
-    }
-
-    /* Overload of the g-operation for the case where beta is all ones. */
-    template <std::size_t I>
-    static std::array<llr_t, I / 2u> g_op_neg(const std::array<llr_t, I> &alpha) {
-        std::array<llr_t, I / 2u> out;
-        for (std::size_t i = 0u; i < I / 2u; i++) {
-            out[i] = alpha[i + I / 2u] - alpha[i];
-        }
-
-        return out;
-    }
-
-    /* Do the h-operation. */
-    template <std::size_t I>
-    static void h_op(std::size_t offset, std::array<bool, N> &beta) {
-        for (std::size_t i = 0u; i < I / 2u; i++) {
-            beta[offset + i] ^= beta[offset + i + I / 2u];
-        }
-    }
-
-    /* Simplified operation for rate-1 nodes. */
-    template <std::size_t I>
-    static void rate_1(std::size_t offset, const std::array<llr_t, I> &alpha, std::array<bool, N> &beta) {
-        for (std::size_t i = 0u; i < I; i++) {
-            beta[offset + i] = std::signbit(alpha[i]);
-        }
-    }
-
-    /* Simplified operation for repetition nodes. */
-    template <std::size_t I>
-    static void rep(std::size_t offset, const std::array<llr_t, I> &alpha, std::array<bool, N> &beta) {
-        if (std::signbit(std::accumulate(alpha.begin(), alpha.begin() + I, 0))) {
-            std::fill_n(beta.begin() + offset, I, true);
-        }
-    }
-
-    /* Simplified operation for SPC nodes. */
-    template <std::size_t I>
-    static void spc(std::size_t offset, const std::array<llr_t, I> &alpha, std::array<bool, N> &beta) {
-        bool parity = beta[offset] = std::signbit(alpha[0u]);
-        llr_t abs_min = std::abs(alpha[0u]);
-        std::size_t abs_min_idx = 0u;
-        for (std::size_t i = 1u; i < I; i++) {
-            /* Make the bit decision by thresholding the LLR. */
-            beta[offset + i] = std::signbit(alpha[i]);
-
-            /* Keep track of the parity. */
-            parity ^= beta[offset + i];
-
-            /* Keep track of the worst bit. */
-            llr_t alpha_abs = std::abs(alpha[i]);
-            if (alpha_abs < abs_min) {
-                abs_min = alpha_abs;
-                abs_min_idx = i;
-            }
-        }
-
-        /* Apply the parity to the worst bit. */
-        beta[offset + abs_min_idx] ^= parity;
     }
 
     static std::array<uint8_t, K / 8u> pack_output(std::array<bool, N> in) {
