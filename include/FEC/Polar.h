@@ -435,6 +435,14 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
     static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
     static_assert(L >= 1u, "List length must be at least one");
 
+    /*
+    Calculate the initial LLR value for shortened bits. Chosen to avoid
+    overflowing llr_t if possible, but otherwise the f-, g- and h-operations
+    need to be specialised to use saturating arithmetic.
+    */
+    static constexpr llr_t init_short =
+        std::numeric_limits<llr_t>::max() >> std::min(Detail::log2(N) + 1u, sizeof(llr_t) * 8u - 4u);
+
     /* Test to see if a node is rate zero (all frozen bits). */
     template <std::size_t... Is>
     static constexpr bool is_rate_0_node(std::index_sequence<Is...>) {
@@ -471,7 +479,6 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
     template <std::size_t Nv, std::size_t... Is>
     static void decode_stages(std::size_t offset, const std::array<llr_t, Nv> &alpha, std::array<bool, N> &beta,
             std::index_sequence<Is...>) {
-
         /* Do special case checks for f-SSCL to reduce computational load. */
         if constexpr (is_rate_1_node(Nv, std::index_sequence<Is...>{})) {
             /*
@@ -656,7 +663,7 @@ public:
         positive value for the LLR datatype, to indicate complete certainty
         as to their value (zero).
         */
-        std::fill_n(alpha.begin() + M, N - M, (llr_t)N);
+        std::fill_n(alpha.begin() + M, N - M, init_short);
 
         /* Run decoding stages and return packed data. */
         std::array<bool, N> beta = {};
