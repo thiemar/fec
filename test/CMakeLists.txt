@@ -38,7 +38,8 @@ ADD_EXECUTABLE(unittest
     TestReedSolomonEncoder.cpp
     TestPolarCodeConstruction.cpp
     TestPolarEncoder.cpp
-    TestPolarDecoder.cpp)
+    TestPolarDecoder.cpp
+    TestPolarDecoderInt8.cpp)
 
 # Create dependency of test on googletest
 ADD_DEPENDENCIES(unittest googletest fecmagic ezpwd_rs mersinvald_reed_solomon)

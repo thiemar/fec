@@ -428,33 +428,23 @@ struct f_op_container {
     }
 };
 
-template <typename llr_t, std::size_t Nv>
-std::array<llr_t, Nv / 2u> f_op(const std::array<llr_t, Nv> &alpha) {
-    return f_op_container<llr_t, Nv>::op(alpha);
-}
-
 /* Simplification of f-operation when only the sign is needed. */
 template <typename llr_t, std::size_t Nv>
 struct f_op_r1_container {
     static std::array<llr_t, Nv / 2u> op(const std::array<llr_t, Nv> &alpha) {
         std::array<llr_t, Nv / 2u> out;
         for (std::size_t i = 0u; i < Nv / 2u; i++) {
-            out[i] = std::signbit(alpha[i] ^ alpha[i + Nv / 2u]);
+            out[i] = alpha[i] ^ alpha[i + Nv / 2u];
         }
 
         return out;
     }
 };
 
-template <typename llr_t, std::size_t Nv>
-std::array<llr_t, Nv / 2u> f_op_r1(const std::array<llr_t, Nv> &alpha) {
-    return f_op_r1_container<llr_t, Nv>::op(alpha);
-}
-
 /* Do the g-operation. */
 template <typename llr_t, std::size_t Nv>
 struct g_op_container {
-    static std::array<llr_t, Nv / 2u> op(const std::array<llr_t, Nv> &alpha, const bool *beta) {
+    static std::array<llr_t, Nv / 2u> op(const std::array<llr_t, Nv> &alpha, const uint8_t *beta) {
         std::array<llr_t, Nv / 2u> out;
         for (std::size_t i = 0u; i < Nv / 2u; i++) {
             out[i] = alpha[i + Nv / 2u] + ((1 - 2 * (llr_t)beta[i]) * alpha[i]);
@@ -463,11 +453,6 @@ struct g_op_container {
         return out;
     }
 };
-
-template <typename llr_t, std::size_t Nv>
-std::array<llr_t, Nv / 2u> g_op(const std::array<llr_t, Nv> &alpha, const bool *beta) {
-    return g_op_container<llr_t, Nv>::op(alpha, beta);
-}
 
 /* Overload of the g-operation for the case where beta is all zeros. */
 template <typename llr_t, std::size_t Nv>
@@ -482,11 +467,6 @@ struct g_op_0_container {
     }
 };
 
-template <typename llr_t, std::size_t Nv>
-std::array<llr_t, Nv / 2u> g_op_0(const std::array<llr_t, Nv> &alpha) {
-    return g_op_0_container<llr_t, Nv>::op(alpha);
-}
-
 /* Overload of the g-operation for the case where beta is all ones. */
 template <typename llr_t, std::size_t Nv>
 struct g_op_1_container {
@@ -500,74 +480,49 @@ struct g_op_1_container {
     }
 };
 
-template <typename llr_t, std::size_t Nv>
-std::array<llr_t, Nv / 2u> g_op_1(const std::array<llr_t, Nv> &alpha) {
-    return g_op_1_container<llr_t, Nv>::op(alpha);
-}
-
 /* Do the h-operation. */
-template <std::size_t Nv>
+template <typename llr_t, std::size_t Nv>
 struct h_op_container {
-    static void op(bool *beta) {
+    static void op(uint8_t *beta) {
         for (std::size_t i = 0u; i < Nv / 2u; i++) {
             beta[i] ^= beta[i + Nv / 2u];
         }
     }
 };
 
-template <std::size_t Nv>
-void h_op(bool *beta) {
-    h_op_container<Nv>::op(beta);
-}
-
 /* Simplified h-operation for when left node is rate-0. */
-template <std::size_t Nv>
+template <typename llr_t, std::size_t Nv>
 struct h_op_0_container {
-    static void op(bool *beta) {
+    static void op(uint8_t *beta) {
         std::copy_n(beta + Nv / 2u, Nv / 2u, beta);
     }
 };
 
-template <std::size_t Nv>
-void h_op_0(bool *beta) {
-    h_op_0_container<Nv>::op(beta);
-}
-
 /* Simplified operation for rate-1 nodes. */
 template <typename llr_t, std::size_t Nv>
 struct rate_1_container {
-    static void op(const std::array<llr_t, Nv> &alpha, bool *beta) {
+    static void op(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
         for (std::size_t i = 0u; i < Nv; i++) {
             beta[i] = std::signbit(alpha[i]);
         }
     }
 };
 
-template <typename llr_t, std::size_t Nv>
-void rate_1(const std::array<llr_t, Nv> &alpha, bool *beta) {
-    rate_1_container<llr_t, Nv>::op(alpha, beta);
-}
-
 /* Simplified operation for repetition nodes. */
 template <typename llr_t, std::size_t Nv>
 struct rep_container {
-    static void op(const std::array<llr_t, Nv> &alpha, bool *beta) {
+    static void op(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
         if (std::signbit(std::accumulate(alpha.begin(), alpha.begin() + Nv, 0))) {
             std::fill_n(beta, Nv, true);
         }
     }
 };
 
-template <typename llr_t, std::size_t Nv>
-void rep(const std::array<llr_t, Nv> &alpha, bool *beta) {
-    rep_container<llr_t, Nv>::op(alpha, beta);
-}
-
 /* Simplified operation for SPC nodes. */
 template <typename llr_t, std::size_t Nv>
 struct spc_container {
-    static void op(const std::array<llr_t, Nv> &alpha, bool *beta) {
-        bool parity = beta[0u] = std::signbit(alpha[0u]);
+    static void op(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        uint8_t parity = beta[0u] = std::signbit(alpha[0u]);
         llr_t abs_min = std::abs(alpha[0u]);
         std::size_t abs_min_idx = 0u;
         for (std::size_t i = 1u; i < Nv; i++) {
@@ -590,8 +545,62 @@ struct spc_container {
     }
 };
 
+/* Include SIMD specialisations if defined. */
+#if defined(USE_SIMD_X86)
+  #include "PolarSIMD_x86.h"
+#elif defined(USE_SIMD_ARMV7E_M)
+  #include "PolarSIMD_Armv7E_M.h"
+#endif
+
+/* Wrapper functions to allow template argument deduction. */
+
 template <typename llr_t, std::size_t Nv>
-void spc(const std::array<llr_t, Nv> &alpha, bool *beta) {
+std::array<llr_t, Nv / 2u> f_op(const std::array<llr_t, Nv> &alpha) {
+    return f_op_container<llr_t, Nv>::op(alpha);
+}
+
+template <typename llr_t, std::size_t Nv>
+std::array<llr_t, Nv / 2u> f_op_r1(const std::array<llr_t, Nv> &alpha) {
+    return f_op_r1_container<llr_t, Nv>::op(alpha);
+}
+
+template <typename llr_t, std::size_t Nv>
+std::array<llr_t, Nv / 2u> g_op(const std::array<llr_t, Nv> &alpha, const uint8_t *beta) {
+    return g_op_container<llr_t, Nv>::op(alpha, beta);
+}
+
+template <typename llr_t, std::size_t Nv>
+std::array<llr_t, Nv / 2u> g_op_0(const std::array<llr_t, Nv> &alpha) {
+    return g_op_0_container<llr_t, Nv>::op(alpha);
+}
+
+template <typename llr_t, std::size_t Nv>
+std::array<llr_t, Nv / 2u> g_op_1(const std::array<llr_t, Nv> &alpha) {
+    return g_op_1_container<llr_t, Nv>::op(alpha);
+}
+
+template <typename llr_t, std::size_t Nv>
+void h_op(uint8_t *beta) {
+    h_op_container<llr_t, Nv>::op(beta);
+}
+
+template <typename llr_t, std::size_t Nv>
+void h_op_0(uint8_t *beta) {
+    h_op_0_container<llr_t, Nv>::op(beta);
+}
+
+template <typename llr_t, std::size_t Nv>
+void rate_1(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+    rate_1_container<llr_t, Nv>::op(alpha, beta);
+}
+
+template <typename llr_t, std::size_t Nv>
+void rep(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+    rep_container<llr_t, Nv>::op(alpha, beta);
+}
+
+template <typename llr_t, std::size_t Nv>
+void spc(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
     spc_container<llr_t, Nv>::op(alpha, beta);
 }
 
@@ -668,7 +677,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
     }
 
     template <std::size_t Nv, std::size_t... Is>
-    static void decode_stages(const std::array<llr_t, Nv> &alpha, bool *beta,
+    static void decode_stages(const std::array<llr_t, Nv> &alpha, uint8_t *beta,
             std::index_sequence<Is...>) {
         /* Do special case checks for f-SSCL to reduce computational load. */
         if constexpr (is_rate_1_node(Nv, std::index_sequence<Is...>{})) {
@@ -710,7 +719,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
             */
             if constexpr (is_rate_0_node(data_indices_left{})) {
                 /* If left is rate-0, then no f-operation is required. */
-            } else if constexpr (is_rate_1_node(Nv, data_indices_left{})) {
+            } else if constexpr (is_rate_1_node(Nv / 2u, data_indices_left{})) {
                 /* If left is rate-1, then f-operation is simplified. */
                 decode_stages(Decoder::Operations::f_op_r1(alpha), beta, data_indices_left{});
             } else {
@@ -727,7 +736,7 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
                 If left was rate-0, a specialised g-operation can be used.
                 */
                 decode_stages(Decoder::Operations::g_op_0(alpha), &beta[Nv / 2u], data_indices_right{});
-            } else if constexpr (is_rep_node(Nv, data_indices_left{})) {
+            } else if constexpr (is_rep_node(Nv / 2u, data_indices_left{})) {
                 /*
                 If left was a repetition node, a specialised g-operation can
                 be used.
@@ -743,14 +752,14 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
             if constexpr (is_rate_0_node(data_indices_right{})) {
                 /* No h-operation required if right node is rate-0. */
             } else if constexpr (is_rate_0_node(data_indices_left{})) {
-                Decoder::Operations::h_op_0<Nv>(beta);
+                Decoder::Operations::h_op_0<llr_t, Nv>(beta);
             } else {
-                Decoder::Operations::h_op<Nv>(beta);
+                Decoder::Operations::h_op<llr_t, Nv>(beta);
             }
         }
     }
 
-    static std::array<uint8_t, K / 8u> pack_output(std::array<bool, N> in) {
+    static std::array<uint8_t, K / 8u> pack_output(std::array<uint8_t, N> in) {
         std::array<uint8_t, K / 8u> out = {};
         std::size_t out_idx = 0u;
 
@@ -779,7 +788,7 @@ public:
         std::fill_n(alpha.begin() + M, N - M, init_short);
 
         /* Run decoding stages and return packed data. */
-        std::array<bool, N> beta = {};
+        std::array<uint8_t, N> beta = {};
         decode_stages(alpha, beta.data(), std::index_sequence<Ds...>{});
         return pack_output(beta);
     }

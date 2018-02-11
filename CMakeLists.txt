@@ -8,6 +8,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-shift-count-overflow -Wno-missing-braces")
 
+OPTION(USE_SIMD_X86 "Use SIMD instructions for x86 architecture" OFF)
+IF(USE_SIMD_X86)
+    ADD_DEFINITIONS(-DUSE_SIMD_X86)
+ENDIF(USE_SIMD_X86)
+
 # Set default ExternalProject root directory
 SET_DIRECTORY_PROPERTIES(PROPERTIES EP_PREFIX .)
 
