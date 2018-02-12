@@ -317,7 +317,7 @@ struct spc_container<int8_t, Nv> {
                 *(__m128i *)tmp = _mm_minpos_epu16(_mm_cvtepi8_epi16(alpha_abs));
                 if (tmp[0u] < abs_min) {
                     abs_min = tmp[0u];
-                    abs_min_idx = tmp[3u] + i;
+                    abs_min_idx = tmp[2u] + i;
                 }
 
                 *(__m128i *)tmp = _mm_minpos_epu16(_mm_cvtepi8_epi16(_mm_bsrli_si128(alpha_abs, 8u)));
