@@ -293,40 +293,55 @@ struct rep_container<int8_t, Nv> {
     }
 };
 
-// template <std::size_t Nv>
-// struct spc_container<int8_t, Nv> {
-//     static void op(const std::array<int8_t, Nv> &alpha, uint8_t *beta) {
-//         /* Ensure Nv is a power of two and greater than one. */
-//         static_assert(Detail::calculate_hamming_weight(Nv) == 1u,
-//             "Block size must be a power of two");
+template <std::size_t Nv>
+struct spc_container<int8_t, Nv> {
+    static void op(const std::array<int8_t, Nv> &alpha, uint8_t *beta) {
+        /* Ensure Nv is a power of two and greater than one. */
+        static_assert(Detail::calculate_hamming_weight(Nv) == 1u,
+            "Block size must be a power of two");
 
-//         if constexpr (Nv > 8u) {
-//             __m128i acc = _mm_cvtepi8_epi16(_mm_loadu_si128((__m128i *)&alpha[0u]));
-//             for (std::size_t i = 8u; i < Nv; i += 8u) {
-//                 acc = _mm_hadd_epi16(acc, _mm_cvtepi8_epi16(_mm_loadu_si128((__m128i *)&alpha[i])));
-//             }
+        std::size_t abs_min_idx = 0u;
+        uint8_t parity = 0u;
+        if constexpr (Nv > 8u) {
+            int8_t abs_min = std::numeric_limits<int8_t>::max();
 
-//             acc = _mm_hadd_epi16(acc, acc);
-//             acc = _mm_hadd_epi16(acc, acc);
-//             acc = _mm_hadd_epi16(acc, acc);
-//             int16_t sum = _mm_extract_epi16(acc, 0u);
+            for (std::size_t i = 0u; i < Nv; i += 16u) {
+                __m128i alpha_vec = _mm_loadu_si128((__m128i *)&alpha[i]);
 
-//             for (std::size_t i = 0u; i < Nv; i += 16u) {
-//                 _mm_storeu_si128((__m128i *)&beta[i], _mm_set1_epi8(std::signbit(sum)));
-//             }
-//         } else if constexpr (Nv > 2u) {
-//             int8_t alpha_vec[16] __attribute__ ((aligned (16))) = {};
-//             std::copy_n(alpha.begin(), Nv, alpha_vec);
+                _mm_storeu_si128((__m128i *)&beta[i], _mm_blendv_epi8(_mm_set1_epi8(0), _mm_set1_epi8(1), alpha_vec));
+                parity ^= (_mm_popcnt_u64(*(uint64_t *)&beta[i]) + _mm_popcnt_u64(*(uint64_t *)&beta[i + 8u])) % 2u;
 
-//             __m128i acc = _mm_cvtepi8_epi16(*(__m128i *)alpha_vec);
-//             acc = _mm_hadd_epi16(acc, acc);
-//             acc = _mm_hadd_epi16(acc, acc);
-//             acc = _mm_hadd_epi16(acc, acc);
-//             int16_t sum = _mm_extract_epi16(acc, 0u);
+                __m128i alpha_abs = _mm_abs_epi8(alpha_vec);
+                int8_t tmp[16u] __attribute__((aligned(16)));
 
-//             if (std::signbit(sum)) {
-//                 std::fill_n(beta, Nv, 1u);
-//             }
-//         }
-//     }
-// };
+                *(__m128i *)tmp = _mm_minpos_epu16(_mm_cvtepi8_epi16(alpha_abs));
+                if (tmp[0u] < abs_min) {
+                    abs_min = tmp[0u];
+                    abs_min_idx = tmp[3u] + i;
+                }
+
+                *(__m128i *)tmp = _mm_minpos_epu16(_mm_cvtepi8_epi16(_mm_bsrli_si128(alpha_abs, 8u)));
+                if (tmp[0u] < abs_min) {
+                    abs_min = tmp[0u];
+                    abs_min_idx = tmp[2u] + i + 8u;
+                }
+            }
+        } else {
+            __m128i alpha_vec = load_vec<Nv>(alpha.data());
+
+            __m128i c = _mm_blendv_epi8(_mm_set1_epi8(0), _mm_set1_epi8(1), alpha_vec);
+            parity = _mm_popcnt_u64(*(uint64_t *)&c) % 2u;
+            std::copy_n((int8_t *)&c, Nv, beta);
+
+            __m128i alpha_abs = _mm_abs_epi8(alpha_vec);
+            std::fill_n((int8_t *)&alpha_abs + Nv, 8u - Nv, std::numeric_limits<int8_t>::max());
+            int8_t tmp[16u] __attribute__((aligned(16)));
+
+            *(__m128i *)tmp = _mm_minpos_epu16(_mm_cvtepi8_epi16(alpha_abs));
+            abs_min_idx = tmp[2u];
+        }
+
+        /* Apply the parity to the worst bit. */
+        beta[abs_min_idx] ^= parity;
+    }
+};
