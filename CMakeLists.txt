@@ -11,7 +11,7 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-shift-count-overflow -Wno-mis
 OPTION(USE_SIMD_X86 "Use SIMD instructions for x86 architecture" OFF)
 IF(USE_SIMD_X86)
     ADD_DEFINITIONS(-DUSE_SIMD_X86)
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mpopcnt")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mpopcnt -msse4.2")
 ENDIF(USE_SIMD_X86)
 
 # Set default ExternalProject root directory
