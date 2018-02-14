@@ -411,7 +411,9 @@ cancellation decoder. They are intended to be able to be specialised, for
 example to create versions which take advantage of SIMD instructions for a
 particular architecture.
 */
-namespace Decoder::Operations {
+namespace Decoder {
+
+namespace Operations {
 
 /* Do the f-operation (min-sum). */
 template <typename llr_t, std::size_t Nv>
@@ -497,7 +499,11 @@ struct h_op_0_container {
     }
 };
 
-/* Simplified operation for rate-1 nodes. */
+/*
+Simplified operation for rate-1 nodes.
+If none of the bits are frozen, this is a rate-1 node and we can simply
+threshold all the LLRs directly.
+*/
 template <typename llr_t, std::size_t Nv>
 struct rate_1_container {
     static void op(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
@@ -507,7 +513,11 @@ struct rate_1_container {
     }
 };
 
-/* Simplified operation for repetition nodes. */
+/*
+Simplified operation for repetition nodes.
+A node is a repetition node if only the last bit is not frozen, and in which
+case all bits will have the same value.
+*/
 template <typename llr_t, std::size_t Nv>
 struct rep_container {
     static void op(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
@@ -517,7 +527,10 @@ struct rep_container {
     }
 };
 
-/* Simplified operation for SPC nodes. */
+/*
+Simplified operation for single-parity-check (SPC) nodes.
+A node is an SPC node if only the first bit is frozen.
+*/
 template <typename llr_t, std::size_t Nv>
 struct spc_container {
     static void op(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
@@ -606,6 +619,244 @@ void spc(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
 }
 
 /*
+In here are defined the various tag classes used for dispatching specialised
+versions of the various decoder operations.
+*/
+
+/* Test to see if a node is rate zero (all frozen bits). */
+template <std::size_t... Is>
+static constexpr bool is_rate_0_node(std::index_sequence<Is...>) {
+    return false;
+}
+
+static constexpr bool is_rate_0_node(std::index_sequence<>) {
+    return true;
+}
+
+/* Test to see if a node is rate one (all data bits). */
+template <std::size_t... Is>
+static constexpr bool is_rate_1_node(std::size_t Nv, std::index_sequence<Is...>) {
+    return sizeof...(Is) == Nv;
+}
+
+static constexpr bool is_rate_1_node(std::size_t Nv, std::index_sequence<>) {
+    return false;
+}
+
+/* Test to see if a node is a repetition node (only last bit not frozen). */
+template <std::size_t... Is>
+static constexpr bool is_rep_node(std::size_t Nv, std::index_sequence<Is...>) {
+    return sizeof...(Is) == 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == Nv - 1u;
+}
+
+static constexpr bool is_rep_node(std::size_t Nv, std::index_sequence<>) {
+    return false;
+}
+
+/*
+Test to see if a node is a single parity check (SPC) node (only first bit
+frozen).
+*/
+template <std::size_t... Is>
+static constexpr bool is_spc_node(std::size_t Nv, std::index_sequence<Is...>) {
+    return sizeof...(Is) > 1u && sizeof...(Is) == Nv - 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == 1u;
+}
+
+static constexpr bool is_spc_node(std::size_t Nv, std::index_sequence<>) {
+    return false;
+}
+
+/* Node tag classes. */
+namespace Nodes {
+
+struct Standard;
+struct Rate0;
+struct Rate1;
+struct Rep;
+struct SPC;
+
+}
+
+/* Helper class used to tag a node based on its index sequence. */
+template <std::size_t Nv, typename NodeSeq, typename Enable = void>
+struct NodeClassifier {
+    using type = Nodes::Standard;
+};
+
+template <std::size_t Nv, typename NodeSeq>
+struct NodeClassifier<Nv, NodeSeq, std::enable_if_t<is_rate_0_node(NodeSeq{})>> {
+    using type = Nodes::Rate0;
+};
+
+template <std::size_t Nv, typename NodeSeq>
+struct NodeClassifier<Nv, NodeSeq, std::enable_if_t<is_rate_1_node(Nv, NodeSeq{})>> {
+    using type = Nodes::Rate1;
+};
+
+template <std::size_t Nv, typename NodeSeq>
+struct NodeClassifier<Nv, NodeSeq, std::enable_if_t<is_rep_node(Nv, NodeSeq{})>> {
+    using type = Nodes::Rep;
+};
+
+template <std::size_t Nv, typename NodeSeq>
+struct NodeClassifier<Nv, NodeSeq, std::enable_if_t<is_spc_node(Nv, NodeSeq{})>> {
+    using type = Nodes::SPC;
+};
+
+template <typename NodeSeq, typename Tag> struct NodeProcessor;
+
+/* Dispatcher class to control sub-node execution. */
+
+/* Standard node. */
+template <typename LeftNodeSeq, typename RightNodeSeq, typename LeftTag, typename RightTag>
+struct NodeDispatcher {
+    template <typename llr_t, std::size_t Nv>
+    static void dispatch(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        NodeProcessor<LeftNodeSeq, LeftTag>::process(Decoder::Operations::f_op(alpha), beta);
+        NodeProcessor<RightNodeSeq, RightTag>::process(Decoder::Operations::g_op(alpha, beta), &beta[Nv / 2u]);
+        Decoder::Operations::h_op<llr_t, Nv>(beta);
+    }
+};
+
+/* Both sub-nodes are rate-0. */
+template <typename LeftNodeSeq, typename RightNodeSeq>
+struct NodeDispatcher<LeftNodeSeq, RightNodeSeq, Nodes::Rate0, Nodes::Rate0> {
+    template <typename llr_t, std::size_t Nv>
+    static void dispatch(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {}
+};
+
+/* Left sub-node is rate-0. */
+template <typename LeftNodeSeq, typename RightNodeSeq, typename RightTag>
+struct NodeDispatcher<LeftNodeSeq, RightNodeSeq, Nodes::Rate0, RightTag> {
+    template <typename llr_t, std::size_t Nv>
+    static void dispatch(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        /* No f-op required, and a specialised g- and h-op can be used. */
+        NodeProcessor<RightNodeSeq, RightTag>::process(Decoder::Operations::g_op_0(alpha), &beta[Nv / 2u]);
+        Decoder::Operations::h_op_0<llr_t, Nv>(beta);
+    }
+};
+
+/* Left sub-node is rate-1. */
+template <typename LeftNodeSeq, typename RightNodeSeq, typename RightTag>
+struct NodeDispatcher<LeftNodeSeq, RightNodeSeq, Nodes::Rate1, RightTag> {
+    template <typename llr_t, std::size_t Nv>
+    static void dispatch(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        /* Simplified f-op can be used. */
+        NodeProcessor<LeftNodeSeq, Nodes::Rate1>::process(Decoder::Operations::f_op_r1(alpha), beta);
+        NodeProcessor<RightNodeSeq, RightTag>::process(Decoder::Operations::g_op(alpha, beta), &beta[Nv / 2u]);
+        Decoder::Operations::h_op<llr_t, Nv>(beta);
+    }
+};
+
+/* Left sub-node is rep. */
+template <typename LeftNodeSeq, typename RightNodeSeq, typename RightTag>
+struct NodeDispatcher<LeftNodeSeq, RightNodeSeq, Nodes::Rep, RightTag> {
+    template <typename llr_t, std::size_t Nv>
+    static void dispatch(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        /* Simplified g-op can be used. */
+        NodeProcessor<LeftNodeSeq, Nodes::Rep>::process(Decoder::Operations::f_op(alpha), beta);
+        NodeProcessor<RightNodeSeq, RightTag>::process(
+            beta[0u] ? Decoder::Operations::g_op_1(alpha) : Decoder::Operations::g_op_0(alpha), &beta[Nv / 2u]);
+        Decoder::Operations::h_op<llr_t, Nv>(beta);
+    }
+};
+
+/* Left sub-node is rate-1, right sub-node is rate-0. */
+template <typename LeftNodeSeq, typename RightNodeSeq>
+struct NodeDispatcher<LeftNodeSeq, RightNodeSeq, Nodes::Rate1, Nodes::Rate0> {
+    template <typename llr_t, std::size_t Nv>
+    static void dispatch(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        /* No g- or h-operation is required. */
+        NodeProcessor<LeftNodeSeq, Nodes::Rate1>::process(Decoder::Operations::f_op_r1(alpha), beta);
+    }
+};
+
+/* Left sub-node is rep, right sub-node is rate-0. */
+template <typename LeftNodeSeq, typename RightNodeSeq>
+struct NodeDispatcher<LeftNodeSeq, RightNodeSeq, Nodes::Rep, Nodes::Rate0> {
+    template <typename llr_t, std::size_t Nv>
+    static void dispatch(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        /* No g- or h-operation is required. */
+        NodeProcessor<LeftNodeSeq, Nodes::Rep>::process(Decoder::Operations::f_op(alpha), beta);
+    }
+};
+
+/* Left sub-node is SPC, right sub-node is rate-0. */
+template <typename LeftNodeSeq, typename RightNodeSeq>
+struct NodeDispatcher<LeftNodeSeq, RightNodeSeq, Nodes::SPC, Nodes::Rate0> {
+    template <typename llr_t, std::size_t Nv>
+    static void dispatch(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        /* No g- or h-operation is required. */
+        NodeProcessor<LeftNodeSeq, Nodes::SPC>::process(Decoder::Operations::f_op(alpha), beta);
+    }
+};
+
+/* Processor node to update LLRs and bit-estimates. */
+
+/* Standard node. */
+template <typename NodeSeq, typename Tag>
+struct NodeProcessor {
+    template <typename llr_t, std::size_t Nv>
+    static void process(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        /* Calculate index sequences for sub-nodes and dispatch them. */
+        constexpr std::pair<std::size_t, std::size_t> block_extents_left = Detail::get_range_extents(
+            (std::size_t)0u, (std::size_t)Nv / 2u, NodeSeq{});
+        using range_indices_left = typename Detail::OffsetIndexSequence<
+            (ptrdiff_t)block_extents_left.first,
+            std::make_index_sequence<block_extents_left.second - block_extents_left.first>>::type;
+        using data_indices_left = decltype(Detail::get_range(NodeSeq{}, range_indices_left{}));
+        using node_tag_left = typename NodeClassifier<Nv / 2u, data_indices_left>::type;
+
+        constexpr std::pair<std::size_t, std::size_t> block_extents_right = Detail::get_range_extents(
+            (std::size_t)Nv / (std::size_t)2u, Nv, NodeSeq{});
+        using range_indices_right = typename Detail::OffsetIndexSequence<
+            (ptrdiff_t)block_extents_right.first,
+            std::make_index_sequence<block_extents_right.second - block_extents_right.first>>::type;
+        using data_indices_right = typename Detail::OffsetIndexSequence<
+            -(ptrdiff_t)Nv / 2, decltype(Detail::get_range(NodeSeq{}, range_indices_right{}))>::type;
+        using node_tag_right = typename NodeClassifier<Nv / 2u, data_indices_right>::type;
+
+        NodeDispatcher<data_indices_left, data_indices_right, node_tag_left, node_tag_right>::dispatch(alpha, beta);
+    }
+};
+
+/* Rate-0 node. */
+template <typename NodeSeq>
+struct NodeProcessor<NodeSeq, Nodes::Rate0> {
+    template <typename llr_t, std::size_t Nv>
+    static void process(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {}
+};
+
+/* Rate-1 node. */
+template <typename NodeSeq>
+struct NodeProcessor<NodeSeq, Nodes::Rate1> {
+    template <typename llr_t, std::size_t Nv>
+    static void process(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        Decoder::Operations::rate_1(alpha, beta);
+    }
+};
+
+/* Repetition node. */
+template <typename NodeSeq>
+struct NodeProcessor<NodeSeq, Nodes::Rep> {
+    template <typename llr_t, std::size_t Nv>
+    static void process(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        Decoder::Operations::rep(alpha, beta);
+    }
+};
+
+/* Single-parity-check node. */
+template <typename NodeSeq>
+struct NodeProcessor<NodeSeq, Nodes::SPC> {
+    template <typename llr_t, std::size_t Nv>
+    static void process(const std::array<llr_t, Nv> &alpha, uint8_t *beta) {
+        Decoder::Operations::spc(alpha, beta);
+    }
+};
+
+}
+
+/*
 Successive cancellation list decoder with a block size of N (must be a power
 of two) and K information bits (must be smaller than or equal to N). The
 DataIndices type is an index sequence with the indices of the K
@@ -641,122 +892,6 @@ class SuccessiveCancellationListDecoder {
     static constexpr llr_t init_short =
         std::numeric_limits<llr_t>::max() >> std::min(Detail::log2(N) + 1u, sizeof(llr_t) * 8u - 4u);
 
-    /* Test to see if a node is rate zero (all frozen bits). */
-    template <std::size_t... Is>
-    static constexpr bool is_rate_0_node(std::index_sequence<Is...>) {
-        return false;
-    }
-
-    static constexpr bool is_rate_0_node(std::index_sequence<>) {
-        return true;
-    }
-
-    /* Test to see if a node is rate one (all data bits). */
-    template <std::size_t... Is>
-    static constexpr bool is_rate_1_node(std::size_t Nv, std::index_sequence<Is...>) {
-        return sizeof...(Is) == Nv;
-    }
-
-    /*
-    Test to see if a node is a repetition node (only last bit not frozen).
-    */
-    template <std::size_t... Is>
-    static constexpr bool is_rep_node(std::size_t Nv, std::index_sequence<Is...>) {
-        return sizeof...(Is) == 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == Nv - 1u;
-    }
-
-    /*
-    Test to see if a node is a single parity check (SPC) node (only first bit
-    frozen).
-    */
-    template <std::size_t... Is>
-    static constexpr bool is_spc_node(std::size_t Nv, std::index_sequence<Is...>) {
-        return sizeof...(Is) == Nv - 1u && Detail::get_index<0u>(std::index_sequence<Is...>{}) == 1u;
-    }
-
-    template <std::size_t Nv, std::size_t... Is>
-    static void decode_stages(const std::array<llr_t, Nv> &alpha, uint8_t *beta,
-            std::index_sequence<Is...>) {
-        /* Do special case checks for f-SSCL to reduce computational load. */
-        if constexpr (is_rate_1_node(Nv, std::index_sequence<Is...>{})) {
-            /*
-            If none of the bits are frozen, this is a rate-1 node and we can
-            simply threshold all the LLRs directly.
-            */
-            Decoder::Operations::rate_1(alpha, beta);
-        } else if constexpr (is_rep_node(Nv, std::index_sequence<Is...>{})) {
-            /*
-            If only the last bit is not frozen, this is a repetition node.
-            */
-            Decoder::Operations::rep(alpha, beta);
-        } else if constexpr (is_spc_node(Nv, std::index_sequence<Is...>{})) {
-            /*
-            If only the first bit is frozen, this is a single parity check
-            (SPC) node.
-            */
-            Decoder::Operations::spc(alpha, beta);
-        } else {
-            /* Get data indices for the left and right sub-trees. */
-            constexpr std::pair<std::size_t, std::size_t> block_extents_left = Detail::get_range_extents(
-                (std::size_t)0u, (std::size_t)Nv / 2u, std::index_sequence<Is...>{});
-            using range_indices_left = typename Detail::OffsetIndexSequence<
-                (ptrdiff_t)block_extents_left.first,
-                std::make_index_sequence<block_extents_left.second - block_extents_left.first>>::type;
-            using data_indices_left = decltype(Detail::get_range(std::index_sequence<Is...>{}, range_indices_left{}));
-
-            constexpr std::pair<std::size_t, std::size_t> block_extents_right = Detail::get_range_extents(
-                (std::size_t)Nv / (std::size_t)2u, Nv, std::index_sequence<Is...>{});
-            using range_indices_right = typename Detail::OffsetIndexSequence<
-                (ptrdiff_t)block_extents_right.first,
-                std::make_index_sequence<block_extents_right.second - block_extents_right.first>>::type;
-            using data_indices_right = typename Detail::OffsetIndexSequence<
-                -(ptrdiff_t)Nv / 2, decltype(Detail::get_range(std::index_sequence<Is...>{}, range_indices_right{}))>::type;
-
-            /*
-            Execute left and right subtrees, with optimisations where possible.
-            */
-            if constexpr (is_rate_0_node(data_indices_left{})) {
-                /* If left is rate-0, then no f-operation is required. */
-            } else if constexpr (is_rate_1_node(Nv / 2u, data_indices_left{})) {
-                /* If left is rate-1, then f-operation is simplified. */
-                decode_stages(Decoder::Operations::f_op_r1(alpha), beta, data_indices_left{});
-            } else {
-                /* Nominal case. */
-                decode_stages(Decoder::Operations::f_op(alpha), beta, data_indices_left{});
-            }
-
-            if constexpr (is_rate_0_node(data_indices_right{})) {
-                /*
-                If right is rate-0, then no g- or h-operation is required.
-                */
-            } else if constexpr (is_rate_0_node(data_indices_left{})) {
-                /*
-                If left was rate-0, a specialised g-operation can be used.
-                */
-                decode_stages(Decoder::Operations::g_op_0(alpha), &beta[Nv / 2u], data_indices_right{});
-            } else if constexpr (is_rep_node(Nv / 2u, data_indices_left{})) {
-                /*
-                If left was a repetition node, a specialised g-operation can
-                be used.
-                */
-                decode_stages(beta[0u] ? Decoder::Operations::g_op_1(alpha) : Decoder::Operations::g_op_0(alpha),
-                    &beta[Nv / 2u], data_indices_right{});
-            } else {
-                /* Nominal case. */
-                decode_stages(Decoder::Operations::g_op(alpha, beta), &beta[Nv / 2u], data_indices_right{});
-            }
-
-            /* Make bit-decisions. */
-            if constexpr (is_rate_0_node(data_indices_right{})) {
-                /* No h-operation required if right node is rate-0. */
-            } else if constexpr (is_rate_0_node(data_indices_left{})) {
-                Decoder::Operations::h_op_0<llr_t, Nv>(beta);
-            } else {
-                Decoder::Operations::h_op<llr_t, Nv>(beta);
-            }
-        }
-    }
-
     template <std::size_t... Ds>
     static std::array<uint8_t, K / 8u> pack_output(std::array<uint8_t, N> in, std::index_sequence<Ds...>) {
         std::array<uint8_t, K / 8u> out = {};
@@ -788,7 +923,7 @@ public:
 
         /* Run decoding stages and return packed data. */
         std::array<uint8_t, N> beta = {};
-        decode_stages(alpha, beta.data(), data_index_sequence{});
+        Decoder::NodeProcessor<data_index_sequence, Decoder::Nodes::Standard>::process(alpha, beta.data());
         return pack_output(beta, data_index_sequence{});
     }
 };
