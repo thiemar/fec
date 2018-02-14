@@ -31,7 +31,7 @@ using ConvolutionalDecoder = Thiemar::Convolutional::PuncturedHardDecisionViterb
     Thiemar::BinarySequence<1, 0, 0, 1, 1, 1, 1>
 >;
 
-using PolarDataIndices = Thiemar::Polar::PolarCodeConstructor<POLAR_BLOCK_SIZE, POLAR_BLOCK_SIZE_SHORTENED, POLAR_DATA_SIZE>::data_index_sequence;
+using PolarDataIndices = Thiemar::Polar::PolarCodeConstructor<POLAR_BLOCK_SIZE, POLAR_BLOCK_SIZE_SHORTENED, POLAR_DATA_SIZE>;
 using PolarEncoder = Thiemar::Polar::PolarEncoder<POLAR_BLOCK_SIZE, POLAR_BLOCK_SIZE_SHORTENED, POLAR_DATA_SIZE, PolarDataIndices>;
 using PolarDecoder = Thiemar::Polar::SuccessiveCancellationListDecoder<POLAR_BLOCK_SIZE, POLAR_BLOCK_SIZE_SHORTENED, POLAR_DATA_SIZE, PolarDataIndices, int8_t>;
 

@@ -6,7 +6,7 @@ void PolarEncoderBlockSize1024_Encode(benchmark::State& state) {
     constexpr std::size_t N = 1024u;
     constexpr std::size_t M = 1024u;
     constexpr std::size_t K = 512u;
-    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>::data_index_sequence;
+    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>;
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
 
     /* Set up test buffers. */
@@ -30,7 +30,7 @@ void PolarEncoderBlockSize768_Encode(benchmark::State& state) {
     constexpr std::size_t N = 1024u;
     constexpr std::size_t M = 768u;
     constexpr std::size_t K = 512u;
-    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>::data_index_sequence;
+    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>;
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
 
     /* Set up test buffers. */

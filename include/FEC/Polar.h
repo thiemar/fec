@@ -276,18 +276,17 @@ The implementation here is largely derived from the following papers:
 [2] https://arxiv.org/pdf/1504.00353.pdf
 [3] https://arxiv.org/pdf/1604.08104.pdf
 */
-template <std::size_t N, std::size_t M, std::size_t K, typename DataIndices>
-class PolarEncoder;
-
-template <std::size_t N, std::size_t M, std::size_t K, std::size_t... Ds>
-class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
+template <std::size_t N, std::size_t M, std::size_t K, typename Code>
+class PolarEncoder {
     static_assert(N >= sizeof(bool_vec_t) * 8u && Detail::calculate_hamming_weight(N) == 1u,
         "Block size must be a power of two and a multiple of the machine word size");
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
     static_assert(M % 8u == 0u, "Number of shortened bits must be a multiple of 8");
     static_assert(M <= N && M >= K, "Number of information bits must be between number of information bits and block size");
-    static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
+    static_assert(Code::data_index_sequence::size() == K, "Number of data bits must be equal to K");
+
+    using data_index_sequence = typename Code::data_index_sequence;
 
     /* Encode the whole buffer in blocks of bool_vec_t. */
     template <std::size_t... Is>
@@ -336,10 +335,10 @@ class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
     template <std::size_t I>
     static bool_vec_t encode_block(const std::array<uint8_t, K / 8u> &in) {
         constexpr std::pair<std::size_t, std::size_t> block_extents = Detail::get_range_extents(
-            I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, std::index_sequence<Ds...>{});
+            I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, data_index_sequence{});
         using range_indices = typename Detail::OffsetIndexSequence<
             (std::ptrdiff_t)block_extents.first, std::make_index_sequence<block_extents.second - block_extents.first>>::type;
-        using block_data_indices = decltype(Detail::get_range(std::index_sequence<Ds...>{}, range_indices{}));
+        using block_data_indices = decltype(Detail::get_range(data_index_sequence{}, range_indices{}));
 
         return encode_block_rows(in, block_data_indices{}, range_indices{});
     }
@@ -354,10 +353,10 @@ class PolarEncoder<N, M, K, std::index_sequence<Ds...>> {
     template <std::size_t I>
     static bool_vec_t encode_systematic_block(const std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> &in) {
         constexpr std::pair<std::size_t, std::size_t> block_extents = Detail::get_range_extents(
-            I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, std::index_sequence<Ds...>{});
+            I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, data_index_sequence{});
         using range_indices = typename Detail::OffsetIndexSequence<
             (std::ptrdiff_t)block_extents.first, std::make_index_sequence<block_extents.second - block_extents.first>>::type;
-        using block_data_indices = decltype(Detail::get_range(std::index_sequence<Ds...>{}, range_indices{}));
+        using block_data_indices = decltype(Detail::get_range(data_index_sequence{}, range_indices{}));
 
         return encode_systematic_block_rows(in, block_data_indices{});
     }
@@ -622,18 +621,17 @@ The algorithm used is the f-SSCL algorithm (fast simplified successive
 cancellation list) described in the following papers:
 [1] https://arxiv.org/pdf/1701.08126.pdf
 */
-template <std::size_t N, std::size_t M, std::size_t K, typename DataIndices, typename llr_t = int32_t, std::size_t L = 1u>
-class SuccessiveCancellationListDecoder;
-
-template <std::size_t N, std::size_t M, std::size_t K, std::size_t... Ds, typename llr_t, std::size_t L>
-class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr_t, L> {
+template <std::size_t N, std::size_t M, std::size_t K, typename Code, typename llr_t = int32_t, std::size_t L = 1u>
+class SuccessiveCancellationListDecoder {
     static_assert(N >= 8u && Detail::calculate_hamming_weight(N) == 1u, "Block size must be a power of two and a multiple of 8");
     static_assert(K <= N && K >= 1u, "Number of information bits must be between 1 and block size");
     static_assert(K % 8u == 0u, "Number of information bits must be a multiple of 8");
     static_assert(M % 8u == 0u, "Number of shortened bits must be a multiple of 8");
     static_assert(M <= N && M >= K, "Number of information bits must be between number of information bits and block size");
-    static_assert(sizeof...(Ds) == K, "Number of data bits must be equal to K");
+    static_assert(Code::data_index_sequence::size() == K, "Number of data bits must be equal to K");
     static_assert(L >= 1u, "List length must be at least one");
+
+    using data_index_sequence = typename Code::data_index_sequence;
 
     /*
     Calculate the initial LLR value for shortened bits. Chosen to avoid
@@ -759,7 +757,8 @@ class SuccessiveCancellationListDecoder<N, M, K, std::index_sequence<Ds...>, llr
         }
     }
 
-    static std::array<uint8_t, K / 8u> pack_output(std::array<uint8_t, N> in) {
+    template <std::size_t... Ds>
+    static std::array<uint8_t, K / 8u> pack_output(std::array<uint8_t, N> in, std::index_sequence<Ds...>) {
         std::array<uint8_t, K / 8u> out = {};
         std::size_t out_idx = 0u;
 
@@ -789,8 +788,8 @@ public:
 
         /* Run decoding stages and return packed data. */
         std::array<uint8_t, N> beta = {};
-        decode_stages(alpha, beta.data(), std::index_sequence<Ds...>{});
-        return pack_output(beta);
+        decode_stages(alpha, beta.data(), data_index_sequence{});
+        return pack_output(beta, data_index_sequence{});
     }
 };
 

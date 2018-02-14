@@ -6,7 +6,7 @@ TEST(PolarEncoderTest, EncodeBlockSize1024) {
     constexpr std::size_t N = 1024u;
     constexpr std::size_t M = 1024u;
     constexpr std::size_t K = 512u;
-    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>::data_index_sequence;
+    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>;
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
 
     std::array<uint8_t, K / 8u> test_in = {
@@ -51,7 +51,7 @@ TEST(PolarEncoderTest, EncodeBlockSize768) {
     constexpr std::size_t N = 1024u;
     constexpr std::size_t M = 768u;
     constexpr std::size_t K = 512u;
-    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>::data_index_sequence;
+    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>;
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
 
     std::array<uint8_t, K / 8u> test_in = {
@@ -92,7 +92,7 @@ TEST(PolarEncoderTest, EncodeBlockSize520) {
     constexpr std::size_t N = 1024u;
     constexpr std::size_t M = 520u;
     constexpr std::size_t K = 512u;
-    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>::data_index_sequence;
+    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>;
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
 
     std::array<uint8_t, K / 8u> test_in = {
@@ -130,7 +130,7 @@ TEST(PolarEncoderTest, EncodeBlockSize512) {
     constexpr std::size_t N = 1024u;
     constexpr std::size_t M = 512u;
     constexpr std::size_t K = 512u;
-    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>::data_index_sequence;
+    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>;
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
 
     std::array<uint8_t, K / 8u> test_in = {

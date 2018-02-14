@@ -6,7 +6,7 @@ void PolarDecoderInt8BlockSize1024_Decode(benchmark::State& state) {
     constexpr std::size_t N = 1024u;
     constexpr std::size_t M = 1024u;
     constexpr std::size_t K = 512u;
-    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>::data_index_sequence;
+    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>;
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
     using TestDecoder = Thiemar::Polar::SuccessiveCancellationListDecoder<N, M, K, TestDataIndices, int8_t>;
 
@@ -33,7 +33,7 @@ void PolarDecoderInt8BlockSize1536_Decode(benchmark::State& state) {
     constexpr std::size_t N = 2048u;
     constexpr std::size_t M = 1536u;
     constexpr std::size_t K = 768u;
-    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>::data_index_sequence;
+    using TestDataIndices = Thiemar::Polar::PolarCodeConstructor<N, M, K, -2>;
     using TestEncoder = Thiemar::Polar::PolarEncoder<N, M, K, TestDataIndices>;
     using TestDecoder = Thiemar::Polar::SuccessiveCancellationListDecoder<N, M, K, TestDataIndices, int8_t>;
 
