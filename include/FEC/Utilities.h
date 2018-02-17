@@ -122,17 +122,19 @@ constexpr bool_vec_t mask_from_index_sequence(std::index_sequence<MaskIndices...
     return mask;
 }
 
-template <std::size_t N, std::size_t... MaskIndices>
+template <typename T, std::size_t N, std::size_t... MaskIndices>
 constexpr auto mask_buffer_from_index_sequence(std::index_sequence<MaskIndices...>) {
-    std::array<uint8_t, N / 8u + (N % 8u)> mask = {};
+    static_assert(N % (sizeof(T) * 8u) == 0u, "Buffer size must be a multiple of the data type");
+
+    std::array<T, N / (sizeof(T) * 8u)> mask = {};
     for (std::size_t i : { MaskIndices... }) {
         if (i == N) {
             continue;
         }
-        mask[i / 8u] |= (uint8_t)1u << (7u - (i % 8u));
+        mask[i / (sizeof(T) * 8u)] |= (T)1u << ((sizeof(T) * 8u)-1u - (i % (sizeof(T) * 8u)));
     }
 
-    return mask.to_std_array();
+    return mask;
 }
 
 template <std::size_t... I>

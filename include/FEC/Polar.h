@@ -296,7 +296,7 @@ class PolarEncoder {
         The first stage uses block operations to expand the buffer into an
         array of bool_vec_t, ready for efficient word-sized operations.
         */
-        std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> non_systematic = { encode_block<Is>(in)... };
+        std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> codeword = { encode_block<Is>(in)... };
 
         /*
         Carry out the rest of the encoding on the expanded buffer using full
@@ -307,7 +307,7 @@ class PolarEncoder {
         for (std::size_t i = 0u; i < num_stages; i++) {
             for (std::size_t j = 0u; j < N / (sizeof(bool_vec_t) * 8u); j += (std::size_t)1u << (i + 1u)) {
                 for (std::size_t k = 0u; k < (std::size_t)1u << i; k++) {
-                    non_systematic[j + k] ^= non_systematic[j + k + ((std::size_t)1u << i)];
+                    codeword[j + k] ^= codeword[j + k + ((std::size_t)1u << i)];
                 }
             }
         }
@@ -316,17 +316,40 @@ class PolarEncoder {
         Do another round of encoding, setting all frozen bits to zero. This
         is done to make the output codeword systematic.
         */
-        std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> systematic = { encode_systematic_block<Is>(non_systematic)... };
+        constexpr auto data_bits_mask = Detail::mask_buffer_from_index_sequence<bool_vec_t, N>(data_index_sequence{});
 
+        /* Sub-word-sized encoding passes. */
+        constexpr std::size_t num_sub_stages = Detail::log2(sizeof(bool_vec_t) * 8u);
+        ((codeword[Is] = encode_sub_word(codeword[Is] & data_bits_mask[Is], std::make_index_sequence<num_sub_stages>{})), ...);
+
+        /* Word-sized encoding passes. */
         for (std::size_t i = 0u; i < num_stages; i++) {
             for (std::size_t j = 0u; j < N / (sizeof(bool_vec_t) * 8u); j += (std::size_t)1u << (i + 1u)) {
                 for (std::size_t k = 0u; k < (std::size_t)1u << i; k++) {
-                    systematic[j + k] ^= systematic[j + k + ((std::size_t)1u << i)];
+                    codeword[j + k] ^= codeword[j + k + ((std::size_t)1u << i)];
                 }
             }
         }
 
-        return systematic;
+        return codeword;
+    }
+
+    /*
+    Do polar encoding steps which involve operations within a single word at
+    a time.
+    */
+    template <std::size_t... Is>
+    static bool_vec_t encode_sub_word(bool_vec_t codeword, std::index_sequence<Is...>) {
+        ((codeword ^= ((codeword & sub_word_mask<Is>(
+            std::make_index_sequence<sizeof(bool_vec_t) * 8u>{})) << ((std::size_t)1u << Is))), ...);
+
+        return codeword;
+    }
+
+    template <std::size_t I, std::size_t... Is>
+    static constexpr bool_vec_t sub_word_mask(std::index_sequence<Is...>) {
+        return Detail::mask_from_index_sequence(std::index_sequence<((Is / ((std::size_t)1u << I)) % 2u) ? 
+            Is : sizeof(bool_vec_t)*8u ...>{});
     }
 
     /*
@@ -348,25 +371,6 @@ class PolarEncoder {
             std::index_sequence<Bs...>, std::index_sequence<Is...>) {
         return (0u ^ ... ^ ((in[Is / 8u] & (uint8_t)1u << (7u - (Is % 8u))) ?
             calculate_row(Bs % (sizeof(bool_vec_t) * 8u)) : 0u));
-    }
-
-    template <std::size_t I>
-    static bool_vec_t encode_systematic_block(const std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> &in) {
-        constexpr std::pair<std::size_t, std::size_t> block_extents = Detail::get_range_extents(
-            I * sizeof(bool_vec_t) * 8u, (I+1u) * sizeof(bool_vec_t) * 8u, data_index_sequence{});
-        using range_indices = typename Detail::OffsetIndexSequence<
-            (std::ptrdiff_t)block_extents.first, std::make_index_sequence<block_extents.second - block_extents.first>>::type;
-        using block_data_indices = decltype(Detail::get_range(data_index_sequence{}, range_indices{}));
-
-        return encode_systematic_block_rows(in, block_data_indices{});
-    }
-
-    template <std::size_t... Is>
-    static bool_vec_t encode_systematic_block_rows(const std::array<bool_vec_t, N / (sizeof(bool_vec_t) * 8u)> &in,
-            std::index_sequence<Is...>) {
-        return (0u ^ ... ^ ((in[Is / (sizeof(bool_vec_t) * 8u)] &
-            (bool_vec_t)1u << ((sizeof(bool_vec_t) * 8u - 1u) - (Is % (sizeof(bool_vec_t) * 8u)))) ?
-            calculate_row(Is % (sizeof(bool_vec_t) * 8u)) : 0u));
     }
 
     /*
@@ -892,12 +896,12 @@ class SuccessiveCancellationListDecoder {
     static constexpr llr_t init_short =
         std::numeric_limits<llr_t>::max() >> std::min(Detail::log2(N) + 1u, sizeof(llr_t) * 8u - 4u);
 
-    template <std::size_t... Ds>
-    static std::array<uint8_t, K / 8u> pack_output(std::array<uint8_t, N> in, std::index_sequence<Ds...>) {
+    template <std::size_t... Is, std::size_t... Ds>
+    static std::array<uint8_t, K / 8u> pack_output(std::array<uint8_t, N> in,
+            std::index_sequence<Is...>, std::index_sequence<Ds...>) {
         std::array<uint8_t, K / 8u> out = {};
-        std::size_t out_idx = 0u;
 
-        ((out[out_idx++ / 8u] |= in[Ds] ? (uint8_t)1u << (7u - (out_idx % 8u)) : 0u), ...);
+        ((out[Is / 8u] |= in[Ds] ? (uint8_t)1u << (7u - (Is % 8u)) : 0u), ...);
 
         return out;
     }
@@ -924,7 +928,7 @@ public:
         /* Run decoding stages and return packed data. */
         std::array<uint8_t, N> beta = {};
         Decoder::NodeProcessor<data_index_sequence, Decoder::Nodes::Standard>::process(alpha, beta.data());
-        return pack_output(beta, data_index_sequence{});
+        return pack_output(beta, std::make_index_sequence<data_index_sequence::size()>{}, data_index_sequence{});
     }
 };
 
