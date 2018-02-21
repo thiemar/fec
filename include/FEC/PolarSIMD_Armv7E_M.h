@@ -22,4 +22,196 @@ SOFTWARE.
 
 #pragma once
 
+#include "arm_math.h"
 
+template <std::size_t N>
+static inline uint32_t simd_q7_load(const int8_t *in) {
+    static_assert(N >= 1u && N <= 4u, "Block size out of range for SIMD vector");
+
+    uint32_t out;
+    std::copy_n(in, N, (int8_t *)&out);
+
+    return out;
+}
+
+template <std::size_t N>
+static inline void simd_q7_store(const uint32_t *in, int8_t *out) {
+    static_assert(N >= 1u && N <= 4u, "Block size out of range for SIMD vector");
+
+    std::copy_n((int8_t *)in, N, out);
+}
+
+static inline uint32_t simd_q7_abs(uint32_t in) {
+    uint32_t in_neg = __SSUB8(0u, in);
+
+    __SADD8(in, 0u);
+    return __SEL(in, in_neg);
+}
+
+template <std::size_t Nv>
+struct f_op_container<int8_t, Nv> {
+    static std::array<int8_t, Nv / 2u> op(const std::array<int8_t, Nv> &alpha) {
+        /* Ensure Nv is a power of two and greater than one. */
+        static_assert(Nv > 1u && Detail::calculate_hamming_weight(Nv) == 1u,
+            "Block size must be a power of two and greater than one");
+
+        constexpr std::size_t block_size = std::min(Nv / 2u, 4u);
+
+        std::array<int8_t, Nv / 2u> out;
+        for (std::size_t i = 0u; i < Nv / 2u; i += 4u) {
+            uint32_t alpha_1 = simd_q7_load<block_size>(alpha.data() + i);
+            uint32_t alpha_2 = simd_q7_load<block_size>(alpha.data() + i + Nv / 2u);
+
+            /* Get absolute values. */
+            uint32_t abs1 = simd_q7_abs(alpha_1);
+            uint32_t abs2 = simd_q7_abs(alpha_2);
+
+            /* Select the smallest. */
+            __SSUB8(abs1, abs2);
+            uint32_t min_abs = __SEL(abs2, abs1);
+
+            /* Select positive or negative values based on the sign. */
+            uint32_t min_abs_neg = __SSUB8(0u, min_abs);
+
+            /* Get the signs of the output vector. */
+            __SSUB8(alpha_1 ^ alpha_2, 0u);
+            uint32_t out_vec = __SEL(min_abs, min_abs_neg);
+            simd_q7_store<block_size>(&out_vec, out.data() + i);
+        }
+
+        return out;
+    }
+};
+
+template <std::size_t Nv>
+struct f_op_r1_container<int8_t, Nv> {
+    static std::array<int8_t, Nv / 2u> op(const std::array<int8_t, Nv> &alpha) {
+        /* Ensure Nv is a power of two and greater than one. */
+        static_assert(Nv > 1u && Detail::calculate_hamming_weight(Nv) == 1u,
+            "Block size must be a power of two and greater than one");
+
+        constexpr std::size_t block_size = std::min(Nv / 2u, 4u);
+
+        std::array<int8_t, Nv / 2u> out;
+        for (std::size_t i = 0u; i < Nv / 2u; i += 4u) {
+            uint32_t alpha_1 = simd_q7_load<block_size>(alpha.data() + i);
+            uint32_t alpha_2 = simd_q7_load<block_size>(alpha.data() + i + Nv / 2u);
+
+            uint32_t out_vec = alpha_1 ^ alpha_2;
+            simd_q7_store<block_size>(&out_vec, out.data() + i);
+        }
+
+        return out;
+    }
+};
+
+template <std::size_t Nv>
+struct g_op_container<int8_t, Nv> {
+    static std::array<int8_t, Nv / 2u> op(const std::array<int8_t, Nv> &alpha, const uint8_t *beta) {
+        /* Ensure Nv is a power of two and greater than one. */
+        static_assert(Nv > 1u && Detail::calculate_hamming_weight(Nv) == 1u,
+            "Block size must be a power of two and greater than one");
+
+        constexpr std::size_t block_size = std::min(Nv / 2u, 4u);
+
+        std::array<int8_t, Nv / 2u> out;
+        for (std::size_t i = 0u; i < Nv / 2u; i += 4u) {
+            uint32_t alpha_1 = simd_q7_load<block_size>(alpha.data() + i);
+            uint32_t alpha_2 = simd_q7_load<block_size>(alpha.data() + i + Nv / 2u);
+            uint32_t beta_vec = simd_q7_load<block_size>((int8_t *)beta + i);
+
+            uint32_t alpha_1_neg = __SSUB8(0u, alpha_1);
+
+            __SSUB8(0u, beta_vec);
+            uint32_t out_vec = __SADD8(alpha_2, __SEL(alpha_1, alpha_1_neg));
+            simd_q7_store<block_size>(&out_vec, out.data() + i);
+        }
+
+        return out;
+    }
+};
+
+template <std::size_t Nv>
+struct g_op_0_container<int8_t, Nv> {
+    static std::array<int8_t, Nv / 2u> op(const std::array<int8_t, Nv> &alpha) {
+        /* Ensure Nv is a power of two and greater than one. */
+        static_assert(Nv > 1u && Detail::calculate_hamming_weight(Nv) == 1u,
+            "Block size must be a power of two and greater than one");
+
+        constexpr std::size_t block_size = std::min(Nv / 2u, 4u);
+
+        std::array<int8_t, Nv / 2u> out;
+        for (std::size_t i = 0u; i < Nv / 2u; i += 4u) {
+            uint32_t alpha_1 = simd_q7_load<block_size>(alpha.data() + i);
+            uint32_t alpha_2 = simd_q7_load<block_size>(alpha.data() + i + Nv / 2u);
+
+            uint32_t out_vec = __SADD8(alpha_2, alpha_1);
+            simd_q7_store<block_size>(&out_vec, out.data() + i);
+        }
+
+        return out;
+    }
+};
+
+template <std::size_t Nv>
+struct g_op_1_container<int8_t, Nv> {
+    static std::array<int8_t, Nv / 2u> op(const std::array<int8_t, Nv> &alpha) {
+        /* Ensure Nv is a power of two and greater than one. */
+        static_assert(Nv > 1u && Detail::calculate_hamming_weight(Nv) == 1u,
+            "Block size must be a power of two and greater than one");
+
+        constexpr std::size_t block_size = std::min(Nv / 2u, 4u);
+
+        std::array<int8_t, Nv / 2u> out;
+        for (std::size_t i = 0u; i < Nv / 2u; i += 4u) {
+            uint32_t alpha_1 = simd_q7_load<block_size>(alpha.data() + i);
+            uint32_t alpha_2 = simd_q7_load<block_size>(alpha.data() + i + Nv / 2u);
+
+            uint32_t out_vec = __SSUB8(alpha_2, alpha_1);
+            simd_q7_store<block_size>(&out_vec, out.data() + i);
+        }
+
+        return out;
+    }
+};
+
+template <std::size_t Nv>
+struct h_op_container<int8_t, Nv> {
+    static std::array<int8_t, Nv / 2u> op(uint8_t *beta) {
+        /* Ensure Nv is a power of two and greater than one. */
+        static_assert(Nv > 1u && Detail::calculate_hamming_weight(Nv) == 1u,
+            "Block size must be a power of two and greater than one");
+
+        constexpr std::size_t block_size = std::min(Nv / 2u, 4u);
+
+        std::array<int8_t, Nv / 2u> out;
+        for (std::size_t i = 0u; i < Nv / 2u; i += 4u) {
+            uint32_t beta_vec_1 = simd_q7_load<block_size>((int8_t *)beta + i);
+            uint32_t beta_vec_2 = simd_q7_load<block_size>((int8_t *)beta + i + Nv / 2u);
+
+            uint32_t out_vec = beta_vec_1 ^ beta_vec_2;
+            simd_q7_store<block_size>(&out_vec, (int8_t *)beta + i);
+        }
+
+        return out;
+    }
+};
+
+template <std::size_t Nv>
+struct rate_1_container<int8_t, Nv> {
+    static void op(const std::array<int8_t, Nv> &alpha, uint8_t *beta) {
+        /* Ensure Nv is a power of two and greater than one. */
+        static_assert(Nv > 1u && Detail::calculate_hamming_weight(Nv) == 1u,
+            "Block size must be a power of two and greater than one");
+
+        constexpr std::size_t block_size = std::min(Nv, 4u);
+
+        for (std::size_t i = 0u; i < Nv; i += 4u) {
+            uint32_t alpha_1 = simd_q7_load<block_size>(alpha.data() + i);
+
+            __SADD8(alpha_1, 0u);
+            uint32_t out_vec = __SEL(0x00000000u, 0x01010101u);
+            simd_q7_store<block_size>(&out_vec, (int8_t *)beta + i);
+        }
+    }
+};
