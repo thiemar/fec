@@ -207,11 +207,40 @@ struct rate_1_container<int8_t, Nv> {
         constexpr std::size_t block_size = std::min(Nv, 4u);
 
         for (std::size_t i = 0u; i < Nv; i += 4u) {
-            uint32_t alpha_1 = simd_q7_load<block_size>(alpha.data() + i);
+            uint32_t alpha_vec = simd_q7_load<block_size>(alpha.data() + i);
 
-            __SADD8(alpha_1, 0u);
+            __SADD8(alpha_vec, 0u);
             uint32_t out_vec = __SEL(0x00000000u, 0x01010101u);
             simd_q7_store<block_size>(&out_vec, (int8_t *)beta + i);
         }
+    }
+};
+
+template <std::size_t Nv>
+struct rep_container<int8_t, Nv> {
+    static void op(const std::array<int8_t, Nv> &alpha, uint8_t *beta) {
+        /* Ensure Nv is a power of two and greater than one. */
+        static_assert(Nv > 1u && Detail::calculate_hamming_weight(Nv) == 1u,
+            "Block size must be a power of two and greater than one");
+
+        constexpr std::size_t block_size = std::min(Nv, 4u);
+
+        uint32_t accumulator = 0u;
+        for (std::size_t i = 0u; i < Nv; i += 4u) {
+            uint32_t alpha_vec = simd_q7_load<block_size>(alpha.data() + i);
+
+            accumulator = __SXTAB16(accumulator, alpha_vec);
+            accumulator = __SXTAB16(accumulator, alpha_vec >> 8u);
+        }
+
+        /* Add accumulator halves. */
+        int16_t alpha_sum;
+        if constexpr (Nv == 2u) {
+            alpha_sum = (int16_t)accumulator;
+        } else {
+            alpha_sum = (int16_t)accumulator + (int16_t)(accumulator >> 16u);
+        }
+
+        std::fill_n(beta, Nv, alpha_sum < 0);
     }
 };
