@@ -43,9 +43,7 @@ static inline void simd_q7_store(const uint32_t *in, int8_t *out) {
 
 static inline uint32_t simd_q7_abs(uint32_t in) {
     uint32_t in_neg = __SSUB8(0u, in);
-
-    __SADD8(in, 0u);
-    return __SEL(in, in_neg);
+    return __SEL(in_neg, in);
 }
 
 template <std::size_t Nv>
