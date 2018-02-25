@@ -177,14 +177,13 @@ struct g_op_1_container<int8_t, Nv> {
 
 template <std::size_t Nv>
 struct h_op_container<int8_t, Nv> {
-    static std::array<int8_t, Nv / 2u> op(uint8_t *beta) {
+    static void op(uint8_t *beta) {
         /* Ensure Nv is a power of two and greater than one. */
         static_assert(Nv > 1u && Detail::calculate_hamming_weight(Nv) == 1u,
             "Block size must be a power of two and greater than one");
 
         constexpr std::size_t block_size = std::min(Nv / 2u, 4u);
 
-        std::array<int8_t, Nv / 2u> out;
         for (std::size_t i = 0u; i < Nv / 2u; i += 4u) {
             uint32_t beta_vec_1 = simd_q7_load<block_size>((int8_t *)beta + i);
             uint32_t beta_vec_2 = simd_q7_load<block_size>((int8_t *)beta + i + Nv / 2u);
@@ -192,8 +191,6 @@ struct h_op_container<int8_t, Nv> {
             uint32_t out_vec = beta_vec_1 ^ beta_vec_2;
             simd_q7_store<block_size>(&out_vec, (int8_t *)beta + i);
         }
-
-        return out;
     }
 };
 
